@@ -27,6 +27,8 @@ function registerTools(toolModule) {
 // Register all tool modules
 registerTools(EncodingTools);
 registerTools(HashTools);
+if (typeof CipherTools !== 'undefined') registerTools(CipherTools);
+if (typeof ClassicalCiphers !== 'undefined') registerTools(ClassicalCiphers);
 
 // ============================================================
 // State
