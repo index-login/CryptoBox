@@ -510,6 +510,168 @@ const CipherTools = {
         description: 'Rabbit 流密码 (16 字节密钥)',
         algorithm: typeof CryptoJS !== 'undefined' ? CryptoJS.Rabbit : null,
     }),
+
+    // --- SM4 国密对称加密 ---
+    sm4: {
+        id: 'sm4',
+        name: 'SM4 加解密',
+        category: 'cipher',
+        description: '国密 SM4 对称加密 (128位密钥，128位分组)',
+        autoDetectable: false,
+        options: [
+            {
+                id: 'mode', label: '加密模式', type: 'select',
+                values: [
+                    { value: 'ecb', label: 'ECB' },
+                    { value: 'cbc', label: 'CBC' },
+                ],
+                default: 'ecb'
+            },
+            {
+                id: 'padding', label: 'Padding', type: 'select',
+                values: [
+                    { value: 'pkcs#7', label: 'PKCS7 (默认)' },
+                    { value: 'none', label: 'No Padding' },
+                ],
+                default: 'pkcs#7'
+            },
+            {
+                id: 'key', label: '密钥 (16字节)', type: 'text',
+                placeholder: '输入密钥（不足自动补0）', default: ''
+            },
+            {
+                id: 'keyFormat', label: '密钥格式', type: 'select',
+                values: [
+                    { value: 'utf8', label: 'UTF-8 文本' },
+                    { value: 'hex', label: 'Hex' },
+                ],
+                default: 'utf8'
+            },
+            {
+                id: 'iv', label: 'IV (CBC模式)', type: 'text',
+                placeholder: 'CBC 模式必需 (16字节)', default: ''
+            },
+            {
+                id: 'ivFormat', label: 'IV 格式', type: 'select',
+                values: [
+                    { value: 'utf8', label: 'UTF-8 文本' },
+                    { value: 'hex', label: 'Hex' },
+                ],
+                default: 'utf8'
+            },
+            {
+                id: 'outputFormat', label: '密文格式', type: 'select',
+                values: [
+                    { value: 'hex', label: 'Hex' },
+                    { value: 'base64', label: 'Base64' },
+                ],
+                default: 'hex'
+            },
+        ],
+        _parseToHex(str, format, requiredLen) {
+            let hex;
+            if (format === 'hex') {
+                hex = str.replace(/\s/g, '');
+            } else {
+                // UTF-8 to hex
+                const bytes = new TextEncoder().encode(str);
+                hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+            }
+            // Pad or truncate to required length (in hex chars = requiredLen * 2)
+            const requiredHexLen = requiredLen * 2;
+            let info = '';
+            if (hex.length < requiredHexLen) {
+                info = `长度不足 ${requiredLen} 字节(实际 ${hex.length / 2})，已自动补0`;
+                hex = hex.padEnd(requiredHexLen, '0');
+            } else if (hex.length > requiredHexLen) {
+                info = `长度超出 ${requiredLen} 字节(实际 ${hex.length / 2})，已自动截断`;
+                hex = hex.substring(0, requiredHexLen);
+            }
+            return { hex, info };
+        },
+        encode(input, opts = {}) {
+            if (typeof sm4 === 'undefined') {
+                return { error: 'SM4 库未加载，请检查网络连接' };
+            }
+            if (!opts.key) return { error: '请输入密钥' };
+
+            try {
+                const messages = [];
+                const keyResult = this._parseToHex(opts.key, opts.keyFormat || 'utf8', 16);
+                if (keyResult.info) messages.push('密钥' + keyResult.info);
+
+                const smOpts = { padding: opts.padding || 'pkcs#7' };
+
+                if (opts.mode === 'cbc') {
+                    if (!opts.iv) return { error: 'CBC 模式需要 IV' };
+                    const ivResult = this._parseToHex(opts.iv, opts.ivFormat || 'utf8', 16);
+                    if (ivResult.info) messages.push('IV' + ivResult.info);
+                    smOpts.mode = 'cbc';
+                    smOpts.iv = ivResult.hex;
+                }
+
+                const encrypted = sm4.encrypt(input, keyResult.hex, smOpts);
+                let output = encrypted;
+                if (opts.outputFormat === 'base64') {
+                    // hex to base64
+                    const bytes = [];
+                    for (let i = 0; i < encrypted.length; i += 2) {
+                        bytes.push(parseInt(encrypted.substr(i, 2), 16));
+                    }
+                    output = btoa(String.fromCharCode.apply(null, bytes));
+                }
+
+                return { output, info: messages.length > 0 ? messages.join('; ') : null };
+            } catch (e) {
+                return { error: `SM4 加密失败: ${e.message}` };
+            }
+        },
+        decode(input, opts = {}) {
+            if (typeof sm4 === 'undefined') {
+                return { error: 'SM4 库未加载，请检查网络连接' };
+            }
+            if (!opts.key) return { error: '请输入密钥' };
+            if (!input.trim()) return { error: '请输入密文' };
+
+            try {
+                const messages = [];
+                const keyResult = this._parseToHex(opts.key, opts.keyFormat || 'utf8', 16);
+                if (keyResult.info) messages.push('密钥' + keyResult.info);
+
+                // Clean ciphertext
+                let cipherHex = CipherHelper.cleanCiphertext(input);
+
+                // If base64, convert to hex
+                if (opts.outputFormat === 'base64') {
+                    try {
+                        const binary = atob(cipherHex);
+                        cipherHex = Array.from(binary).map(ch => ch.charCodeAt(0).toString(16).padStart(2, '0')).join('');
+                    } catch {
+                        return { error: '密文 Base64 格式无效' };
+                    }
+                }
+
+                const smOpts = { padding: opts.padding || 'pkcs#7' };
+
+                if (opts.mode === 'cbc') {
+                    if (!opts.iv) return { error: 'CBC 模式需要 IV' };
+                    const ivResult = this._parseToHex(opts.iv, opts.ivFormat || 'utf8', 16);
+                    if (ivResult.info) messages.push('IV' + ivResult.info);
+                    smOpts.mode = 'cbc';
+                    smOpts.iv = ivResult.hex;
+                }
+
+                const decrypted = sm4.decrypt(cipherHex, keyResult.hex, smOpts);
+                if (!decrypted) {
+                    return { error: '解密失败：可能是密钥/IV错误或Padding不匹配' };
+                }
+
+                return { output: decrypted, info: messages.length > 0 ? messages.join('; ') : null };
+            } catch (e) {
+                return { error: `SM4 解密失败: ${e.message}。可能原因：密钥/IV错误、Padding不匹配` };
+            }
+        }
+    },
 };
 
 // Export
