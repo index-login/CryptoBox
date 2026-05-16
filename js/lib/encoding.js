@@ -10,6 +10,25 @@ const EncodingTools = {
         name: 'Base64 编解码',
         category: 'encoding',
         description: '标准 Base64 / URL-safe Base64 编解码',
+        autoDetectable: true,
+        detectEncoded(input) {
+            const s = input.trim();
+            // Base64: 只含合法字符，长度>=4，且能成功解码
+            if (!/^[A-Za-z0-9+/\-_=\s]+$/.test(s)) return false;
+            const clean = s.replace(/\s/g, '');
+            if (clean.length < 4) return false;
+            // 含有非ASCII可打印字符的不太可能是手打文本
+            try {
+                let b64 = clean.replace(/-/g, '+').replace(/_/g, '/');
+                while (b64.length % 4 !== 0) b64 += '=';
+                atob(b64);
+                // 如果包含 +/= 或 -_ 特征字符，大概率是 Base64
+                if (/[+/=]/.test(clean) || (/[-_]/.test(clean) && clean.length > 8)) return true;
+                // 纯字母数字且长度较长也可能是
+                if (clean.length >= 16 && /[0-9]/.test(clean) && /[A-Z]/.test(clean) && /[a-z]/.test(clean)) return true;
+                return false;
+            } catch { return false; }
+        },
         options: [
             {
                 id: 'variant',
@@ -70,6 +89,12 @@ const EncodingTools = {
         name: 'Base32 编解码',
         category: 'encoding',
         description: '标准 Base32 (RFC 4648) 编解码',
+        autoDetectable: true,
+        detectEncoded(input) {
+            const s = input.trim().toUpperCase();
+            // Base32: 只含 A-Z2-7 和 =，长度>=8
+            return /^[A-Z2-7=\s]{8,}$/.test(s) && s.replace(/[=\s]/g, '').length >= 8;
+        },
         options: [],
         encode(input) {
             const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -118,6 +143,11 @@ const EncodingTools = {
         name: 'URL 编解码',
         category: 'encoding',
         description: 'URL 编码/解码 (Percent-encoding)',
+        autoDetectable: true,
+        detectEncoded(input) {
+            // 包含 %XX 格式即为已编码
+            return /%[0-9A-Fa-f]{2}/.test(input);
+        },
         options: [
             {
                 id: 'mode',
@@ -171,6 +201,11 @@ const EncodingTools = {
         name: 'HTML 实体编解码',
         category: 'encoding',
         description: 'HTML 实体编码/解码',
+        autoDetectable: true,
+        detectEncoded(input) {
+            // 包含 &xxx; 或 &#xxx; 格式即为已编码
+            return /&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/.test(input);
+        },
         options: [
             {
                 id: 'mode',
@@ -230,6 +265,11 @@ const EncodingTools = {
         name: 'Unicode 编解码',
         category: 'encoding',
         description: 'Unicode 转义序列编解码 (\\uXXXX)',
+        autoDetectable: true,
+        detectEncoded(input) {
+            // 包含 \uXXXX 或 \UXXXXXXXX 或 U+XXXX 格式
+            return /\\u[0-9A-Fa-f]{4}|\\U[0-9A-Fa-f]{8}|U\+[0-9A-Fa-f]{4,6}/.test(input);
+        },
         options: [
             {
                 id: 'format',
@@ -319,6 +359,22 @@ const EncodingTools = {
         name: 'Hex (十六进制) 编解码',
         category: 'encoding',
         description: '文本与十六进制互转',
+        autoDetectable: true,
+        detectEncoded(input) {
+            const s = input.trim();
+            // 带 0x 或 \x 前缀的一定是 hex
+            if (/^(0x[0-9A-Fa-f]{2}[\s,;]*)+$/i.test(s)) return true;
+            if (/^(\\x[0-9A-Fa-f]{2})+$/i.test(s)) return true;
+            // 纯 hex 字符，偶数长度，且长度>=4
+            const clean = s.replace(/[\s:,;\-]/g, '');
+            if (/^[0-9A-Fa-f]+$/.test(clean) && clean.length >= 4 && clean.length % 2 === 0) {
+                // 排除纯数字（可能是十进制数）
+                if (/[a-fA-F]/.test(clean)) return true;
+                // 纯数字但很长，也可能是 hex
+                if (clean.length >= 8) return true;
+            }
+            return false;
+        },
         options: [
             {
                 id: 'separator',

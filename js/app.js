@@ -109,7 +109,7 @@ function selectTool(toolId) {
     if (!tool) return;
 
     currentTool = tool;
-    currentAction = 'encode';
+    currentAction = tool.autoDetectable ? 'auto' : 'encode';
 
     // Update URL hash
     window.location.hash = toolId;
@@ -144,10 +144,16 @@ function renderToolOptions(tool) {
     container.classList.remove('hidden');
 
     // Always show action toggle
+    const hasAuto = tool.autoDetectable;
     let html = `
         <div class="flex items-center gap-4 mb-3${tool.options && tool.options.length > 0 ? ' pb-3 border-b border-dark-500' : ''}">
+            ${hasAuto ? `
             <label class="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="action" value="encode" checked class="text-accent">
+                <input type="radio" name="action" value="auto" checked class="text-accent">
+                <span class="text-sm">自动识别</span>
+            </label>` : ''}
+            <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="action" value="encode" ${hasAuto ? '' : 'checked'} class="text-accent">
                 <span class="text-sm">${getActionLabel(tool, 'encode')}</span>
             </label>
             <label class="flex items-center gap-2 cursor-pointer">
@@ -259,7 +265,13 @@ function execute() {
     }
 
     // Execute
-    const fn = currentAction === 'encode' ? currentTool.encode : currentTool.decode;
+    let action = currentAction;
+    if (action === 'auto' && currentTool.autoDetectable && currentTool.detectEncoded) {
+        action = currentTool.detectEncoded(input) ? 'decode' : 'encode';
+        showMessage(`自动识别: ${action === 'decode' ? '检测到已编码内容，执行解码' : '执行编码'}`, 'info');
+    }
+
+    const fn = action === 'encode' ? currentTool.encode : currentTool.decode;
     if (!fn) {
         showMessage('该工具不支持此操作', 'error');
         return;
@@ -272,7 +284,10 @@ function execute() {
         showMessage(result.error, 'error');
     } else {
         dom.outputText.value = result.output || '';
-        if (result.info) {
+        if (action !== currentAction && currentAction === 'auto') {
+            // 自动模式下显示识别结果
+            showMessage(`自动识别: ${action === 'decode' ? '→ 解码' : '→ 编码'}`, 'success');
+        } else if (result.info) {
             showMessage(result.info, 'info');
         } else {
             hideMessage();
@@ -282,14 +297,16 @@ function execute() {
 
 function executeBatch(input, opts) {
     const lines = input.split('\n').filter(line => line.trim() !== '');
-    const fn = currentAction === 'encode' ? currentTool.encode : currentTool.decode;
-
-    if (!fn) {
-        showMessage('该工具不支持此操作', 'error');
-        return;
-    }
 
     const results = lines.map((line, idx) => {
+        let action = currentAction;
+        if (action === 'auto' && currentTool.autoDetectable && currentTool.detectEncoded) {
+            action = currentTool.detectEncoded(line) ? 'decode' : 'encode';
+        }
+        const fn = action === 'encode' ? currentTool.encode : currentTool.decode;
+        if (!fn) {
+            return `[行${idx + 1} 错误] 不支持此操作`;
+        }
         const result = fn.call(currentTool, line, opts);
         if (result.error) {
             return `[行${idx + 1} 错误] ${result.error}`;
