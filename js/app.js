@@ -313,6 +313,8 @@ function execute() {
         showMessage(result.error, 'error');
     } else {
         dom.outputText.value = result.output || '';
+        // Save to history on success
+        addToHistory(input, result.output, opts);
         if (action !== currentAction && currentAction === 'auto') {
             // 自动模式下显示识别结果
             showMessage(`自动识别: ${action === 'decode' ? '→ 解码' : '→ 编码'}`, 'success');
@@ -512,10 +514,16 @@ function init() {
         outputMessage: $('#output-message'),
         globalSearch: $('#global-search'),
         toast: $('#toast'),
+        historyPanel: $('#history-panel'),
+        historyList: $('#history-list'),
+        historyToggle: $('#history-toggle'),
+        btnClearHistory: $('#btn-clear-history'),
     };
 
     renderSidebar();
     bindEvents();
+    bindHistoryEvents();
+    renderHistory();
 
     // Check URL hash for initial tool
     const hash = window.location.hash.slice(1);
@@ -527,6 +535,141 @@ function init() {
     dom.autoPreprocess.checked = true;
 
     console.log(`[CryptoBox] Loaded ${Object.keys(tools).length} tools`);
+}
+
+// ============================================================
+// History Panel
+// ============================================================
+
+function renderHistory() {
+    if (!dom.historyList) return;
+    const items = History.getAll();
+
+    if (items.length === 0) {
+        dom.historyList.innerHTML = '<div class="text-center text-xs text-gray-600 py-8">暂无历史记录</div>';
+        return;
+    }
+
+    dom.historyList.innerHTML = items.map(item => {
+        const keyDisplay = item.key ? `<div class="history-card-key">Key: ${History.maskKey(item.key)}</div>` : '';
+        return `
+            <div class="history-card" data-history-id="${item.id}">
+                <div class="history-card-header">
+                    <span class="history-card-tool">${item.toolName}</span>
+                    <span class="history-card-time">${History.formatTime(item.timestamp)}</span>
+                </div>
+                <div class="history-card-content">
+                    <div><span class="label">输入:</span><span class="value">${escapeHtml(item.input.substring(0, 40))}</span></div>
+                    <div><span class="label">输出:</span><span class="value">${escapeHtml(item.output.substring(0, 40))}</span></div>
+                    ${keyDisplay}
+                </div>
+                <div class="history-card-actions">
+                    <button class="restore" data-action="restore" title="恢复此操作">恢复</button>
+                    <button class="delete" data-action="delete" title="删除">删除</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function escapeHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function addToHistory(input, output, opts) {
+    if (!currentTool || !output) return;
+    History.add({
+        toolId: currentTool.id,
+        toolName: currentTool.name,
+        action: currentAction,
+        input: input,
+        output: output,
+        opts: opts,
+    });
+    renderHistory();
+}
+
+function restoreFromHistory(id) {
+    const items = History.getAll();
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+
+    // Switch to the tool
+    if (tools[item.toolId]) {
+        selectTool(item.toolId);
+    }
+
+    // Restore input
+    dom.inputText.value = item.input;
+
+    // Restore options (key, iv, etc.)
+    setTimeout(() => {
+        if (item.opts) {
+            Object.entries(item.opts).forEach(([key, value]) => {
+                const el = document.querySelector(`[data-option="${key}"]`);
+                if (el && value) el.value = value;
+            });
+        }
+    }, 50);
+
+    showToast('已恢复历史操作');
+}
+
+function bindHistoryEvents() {
+    // Toggle history panel
+    if (dom.historyToggle) {
+        dom.historyToggle.addEventListener('click', () => {
+            const panel = dom.historyPanel;
+            if (panel.classList.contains('open') || !panel.classList.contains('hidden')) {
+                panel.classList.add('hidden');
+                panel.classList.remove('open');
+                dom.historyToggle.style.display = '';
+            } else {
+                panel.classList.remove('hidden');
+                panel.classList.add('open');
+                dom.historyToggle.style.display = 'none';
+            }
+        });
+    }
+
+    // Clear history
+    if (dom.btnClearHistory) {
+        dom.btnClearHistory.addEventListener('click', () => {
+            History.clear();
+            renderHistory();
+            showToast('历史记录已清空');
+        });
+    }
+
+    // History list click delegation
+    if (dom.historyList) {
+        dom.historyList.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-action]');
+            if (!btn) return;
+
+            const card = btn.closest('[data-history-id]');
+            if (!card) return;
+
+            const id = card.dataset.historyId;
+            const action = btn.dataset.action;
+
+            if (action === 'restore') {
+                restoreFromHistory(id);
+            } else if (action === 'delete') {
+                History.remove(id);
+                renderHistory();
+                showToast('已删除');
+            }
+        });
+    }
+
+    // Ctrl+H toggle history
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'h') {
+            e.preventDefault();
+            if (dom.historyToggle) dom.historyToggle.click();
+        }
+    });
 }
 
 // Start - handle both cases: DOMContentLoaded already fired or not
