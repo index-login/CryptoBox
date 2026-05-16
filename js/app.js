@@ -29,6 +29,8 @@ registerTools(EncodingTools);
 registerTools(HashTools);
 if (typeof CipherTools !== 'undefined') registerTools(CipherTools);
 if (typeof ClassicalCiphers !== 'undefined') registerTools(ClassicalCiphers);
+if (typeof SM2Tools !== 'undefined') registerTools(SM2Tools);
+if (typeof RSATools !== 'undefined') registerTools(RSATools);
 
 // ============================================================
 // State

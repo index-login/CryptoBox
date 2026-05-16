@@ -435,6 +435,9 @@ const HashTools = {
                     `SHA-3-256:  ${CryptoJS.SHA3(input, { outputLength: 256 }).toString()}`,
                     `RIPEMD-160: ${CryptoJS.RIPEMD160(input).toString()}`,
                 ];
+                if (typeof sm3 !== 'undefined') {
+                    results.push(`SM3:        ${sm3(input)}`);
+                }
                 return { output: results.join('\n') };
             } catch (e) {
                 return { error: `哈希计算失败: ${e.message}` };
@@ -442,6 +445,59 @@ const HashTools = {
         },
         decode() {
             return { error: '哈希是单向函数，不支持解密。' };
+        }
+    },
+
+    // --- SM3 国密哈希 ---
+    sm3Hash: {
+        id: 'sm3Hash',
+        name: 'SM3',
+        category: 'hash',
+        description: '国密 SM3 哈希算法 (256位摘要)',
+        options: [
+            {
+                id: 'mode', label: '模式', type: 'select',
+                values: [
+                    { value: 'hash', label: '普通哈希' },
+                    { value: 'hmac', label: 'HMAC-SM3' },
+                ],
+                default: 'hash'
+            },
+            {
+                id: 'key', label: 'HMAC 密钥', type: 'text',
+                placeholder: 'HMAC 模式时输入密钥', default: ''
+            },
+            {
+                id: 'outputCase', label: '输出大小写', type: 'select',
+                values: [
+                    { value: 'lower', label: '小写' },
+                    { value: 'upper', label: '大写' },
+                ],
+                default: 'lower'
+            }
+        ],
+        encode(input, opts = {}) {
+            if (typeof sm3 === 'undefined') {
+                return { error: 'SM3 库未加载，请检查网络连接' };
+            }
+            try {
+                let result;
+                if (opts.mode === 'hmac') {
+                    if (!opts.key) return { error: '请输入 HMAC 密钥' };
+                    result = sm3(input, { mode: 'hmac', key: opts.key });
+                } else {
+                    result = sm3(input);
+                }
+                if (opts.outputCase === 'upper') {
+                    result = result.toUpperCase();
+                }
+                return { output: result };
+            } catch (e) {
+                return { error: `SM3 计算失败: ${e.message}` };
+            }
+        },
+        decode() {
+            return { error: 'SM3 是单向哈希函数，不支持解密。' };
         }
     }
 };
