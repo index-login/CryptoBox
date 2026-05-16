@@ -196,7 +196,22 @@ function createBlockCipher(config) {
         name,
         category: 'cipher',
         description,
-        autoDetectable: false,
+        autoDetectable: true,
+        detectEncoded(input) {
+            const s = input.trim();
+            if (!s) return false;
+            // Looks like Base64 ciphertext: valid base64 chars, length multiple of 4, length >= 16
+            const b64Clean = s.replace(/\s/g, '');
+            if (/^[A-Za-z0-9+/=\-_]+$/.test(b64Clean) && b64Clean.length >= 16 && b64Clean.length % 4 <= 1) {
+                return true;
+            }
+            // Looks like Hex ciphertext: all hex chars, even length, length >= 16
+            const hexClean = s.replace(/[\s:,;\-]/g, '');
+            if (/^[0-9A-Fa-f]+$/.test(hexClean) && hexClean.length >= 16 && hexClean.length % 2 === 0) {
+                return true;
+            }
+            return false;
+        },
         options: [
             {
                 id: 'mode', label: '加密模式', type: 'select',
@@ -393,7 +408,14 @@ function createStreamCipher(config) {
 
     return {
         id, name, category: 'cipher', description,
-        autoDetectable: false,
+        autoDetectable: true,
+        detectEncoded(input) {
+            const s = input.trim().replace(/\s/g, '');
+            if (!s) return false;
+            if (/^[A-Za-z0-9+/=\-_]+$/.test(s) && s.length >= 8 && s.length % 4 <= 1) return true;
+            if (/^[0-9A-Fa-f]+$/.test(s) && s.length >= 8 && s.length % 2 === 0) return true;
+            return false;
+        },
         options: [
             {
                 id: 'key', label: '密钥', type: 'text',
@@ -517,7 +539,14 @@ const CipherTools = {
         name: 'SM4 加解密',
         category: 'cipher',
         description: '国密 SM4 对称加密 (128位密钥，128位分组)',
-        autoDetectable: false,
+        autoDetectable: true,
+        detectEncoded(input) {
+            const s = input.trim().replace(/\s/g, '');
+            if (!s) return false;
+            if (/^[A-Za-z0-9+/=\-_]+$/.test(s) && s.length >= 16 && s.length % 4 <= 1) return true;
+            if (/^[0-9A-Fa-f]+$/.test(s) && s.length >= 16 && s.length % 2 === 0) return true;
+            return false;
+        },
         options: [
             {
                 id: 'mode', label: '加密模式', type: 'select',

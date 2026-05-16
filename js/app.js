@@ -166,34 +166,59 @@ function renderToolOptions(tool) {
     `;
 
     if (tool.options && tool.options.length > 0) {
-        html += `<div class="tool-options-grid">`;
+        // Separate key/IV options from other options
+        const keyIvOpts = tool.options.filter(o => o.id === 'key' || o.id === 'iv');
+        const formatOpts = tool.options.filter(o => o.id === 'keyFormat' || o.id === 'ivFormat');
+        const otherOpts = tool.options.filter(o => 
+            !['key', 'iv', 'keyFormat', 'ivFormat'].includes(o.id)
+        );
 
-        tool.options.forEach(opt => {
-        html += `<div class="option-group">`;
-        html += `<label for="opt-${opt.id}">${opt.label}</label>`;
-
-        if (opt.type === 'select') {
-            html += `<select id="opt-${opt.id}" data-option="${opt.id}">`;
-            opt.values.forEach(v => {
-                const selected = v.value === opt.default ? 'selected' : '';
-                html += `<option value="${v.value}" ${selected}>${v.label}</option>`;
+        // Render other options in grid
+        if (otherOpts.length > 0) {
+            html += `<div class="tool-options-grid">`;
+            otherOpts.forEach(opt => {
+                html += `<div class="option-group">`;
+                html += `<label for="opt-${opt.id}">${opt.label}</label>`;
+                if (opt.type === 'select') {
+                    html += `<select id="opt-${opt.id}" data-option="${opt.id}">`;
+                    opt.values.forEach(v => {
+                        const selected = v.value === opt.default ? 'selected' : '';
+                        html += `<option value="${v.value}" ${selected}>${v.label}</option>`;
+                    });
+                    html += `</select>`;
+                } else if (opt.type === 'text') {
+                    html += `<input type="text" id="opt-${opt.id}" data-option="${opt.id}" 
+                        placeholder="${opt.placeholder || ''}" value="${opt.default || ''}">`;
+                } else if (opt.type === 'number') {
+                    html += `<input type="number" id="opt-${opt.id}" data-option="${opt.id}" 
+                        value="${opt.default || ''}" min="${opt.min || ''}" max="${opt.max || ''}">`;
+                }
+                html += `</div>`;
             });
-            html += `</select>`;
-        } else if (opt.type === 'text') {
-            html += `<input type="text" id="opt-${opt.id}" data-option="${opt.id}" 
-                placeholder="${opt.placeholder || ''}" value="${opt.default || ''}">`;
-            if (opt.id === 'key' || opt.id === 'iv') {
-                html += `<span class="key-length-hint" id="hint-${opt.id}"></span>`;
-            }
-        } else if (opt.type === 'number') {
-            html += `<input type="number" id="opt-${opt.id}" data-option="${opt.id}" 
-                value="${opt.default || ''}" min="${opt.min || ''}" max="${opt.max || ''}">`;
+            html += `</div>`;
         }
 
-        html += `</div>`;
-    });
-
-        html += `</div>`;
+        // Render key/IV as full-width rows
+        keyIvOpts.forEach(opt => {
+            const fmtOpt = formatOpts.find(f => f.id === opt.id + 'Format');
+            html += `<div class="key-iv-row mt-3">`;
+            html += `<div class="flex items-center gap-2 mb-1">`;
+            html += `<label class="text-xs text-gray-400">${opt.label}</label>`;
+            if (fmtOpt) {
+                html += `<select id="opt-${fmtOpt.id}" data-option="${fmtOpt.id}" class="bg-dark-700 border border-dark-500 rounded text-xs px-1.5 py-0.5">`;
+                fmtOpt.values.forEach(v => {
+                    const selected = v.value === fmtOpt.default ? 'selected' : '';
+                    html += `<option value="${v.value}" ${selected}>${v.label}</option>`;
+                });
+                html += `</select>`;
+            }
+            html += `<span class="key-length-hint" id="hint-${opt.id}"></span>`;
+            html += `</div>`;
+            html += `<input type="text" id="opt-${opt.id}" data-option="${opt.id}" 
+                placeholder="${opt.placeholder || ''}" value="${opt.default || ''}"
+                class="w-full bg-dark-700 border border-dark-500 rounded-md px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-accent placeholder-gray-600">`;
+            html += `</div>`;
+        });
     }
 
     container.innerHTML = html;
