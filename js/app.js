@@ -551,7 +551,8 @@ function renderHistory() {
     }
 
     dom.historyList.innerHTML = items.map(item => {
-        const keyDisplay = item.key ? `<div class="history-card-key">Key: ${History.maskKey(item.key)}</div>` : '';
+        const keyDisplay = item.key ? `<div class="history-card-key">Key: ${escapeHtml(item.key)}</div>` : '';
+        const ivDisplay = item.iv ? `<div class="history-card-key">IV: ${escapeHtml(item.iv)}</div>` : '';
         return `
             <div class="history-card" data-history-id="${item.id}">
                 <div class="history-card-header">
@@ -562,6 +563,7 @@ function renderHistory() {
                     <div><span class="label">输入:</span><span class="value">${escapeHtml(item.input.substring(0, 40))}</span></div>
                     <div><span class="label">输出:</span><span class="value">${escapeHtml(item.output.substring(0, 40))}</span></div>
                     ${keyDisplay}
+                    ${ivDisplay}
                 </div>
                 <div class="history-card-actions">
                     <button class="restore" data-action="restore" title="恢复此操作">恢复</button>

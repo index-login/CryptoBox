@@ -33,7 +33,7 @@ const History = {
             input: this._truncate(record.input, 100),
             output: this._truncate(record.output, 100),
             opts: record.opts || {},
-            // 保存密钥/IV（脱敏显示但完整存储，方便恢复）
+            // 保存密钥/IV，完整存储方便恢复
             key: record.opts.key || '',
             iv: record.opts.iv || '',
         };
