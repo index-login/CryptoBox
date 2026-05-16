@@ -174,8 +174,5 @@ const Preprocessor = {
     }
 };
 
-// Export
-if (typeof window !== 'undefined') {
-    window.Preprocessor = Preprocessor;
-}
-export default Preprocessor;
+// Export for global usage
+window.Preprocessor = Preprocessor;

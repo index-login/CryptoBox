@@ -207,8 +207,5 @@ const Format = {
     }
 };
 
-// Export for both module and global usage
-if (typeof window !== 'undefined') {
-    window.Format = Format;
-}
-export default Format;
+// Export for global usage
+window.Format = Format;

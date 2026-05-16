@@ -446,8 +446,5 @@ const HashTools = {
     }
 };
 
-// Export
-if (typeof window !== 'undefined') {
-    window.HashTools = HashTools;
-}
-export default HashTools;
+// Export for global usage
+window.HashTools = HashTools;

@@ -447,8 +447,5 @@ const EncodingTools = {
     }
 };
 
-// Export
-if (typeof window !== 'undefined') {
-    window.EncodingTools = EncodingTools;
-}
-export default EncodingTools;
+// Export for global usage
+window.EncodingTools = EncodingTools;

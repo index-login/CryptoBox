@@ -3,11 +3,6 @@
  * 主应用逻辑：工具注册、路由、UI 渲染、事件绑定
  */
 
-import Format from './core/format.js';
-import Preprocessor from './core/preprocessor.js';
-import EncodingTools from './lib/encoding.js';
-import HashTools from './lib/hash.js';
-
 // ============================================================
 // Tool Registry
 // ============================================================
@@ -47,29 +42,7 @@ let currentAction = 'encode'; // 'encode' or 'decode'
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
-const dom = {
-    sidebar: $('#sidebar'),
-    sidebarToggle: $('#sidebar-toggle'),
-    toolNav: $('#tool-nav'),
-    welcomePage: $('#welcome-page'),
-    toolWorkspace: $('#tool-workspace'),
-    toolTitle: $('#tool-title'),
-    toolOptions: $('#tool-options'),
-    inputText: $('#input-text'),
-    outputText: $('#output-text'),
-    inputFormat: $('#input-format'),
-    outputFormat: $('#output-format'),
-    btnExecute: $('#btn-execute'),
-    btnSwap: $('#btn-swap'),
-    btnClearAll: $('#btn-clear-all'),
-    btnClearInput: $('#btn-clear-input'),
-    btnCopy: $('#btn-copy'),
-    autoPreprocess: $('#auto-preprocess'),
-    batchMode: $('#batch-mode'),
-    outputMessage: $('#output-message'),
-    globalSearch: $('#global-search'),
-    toast: $('#toast'),
-};
+let dom = {};
 
 // ============================================================
 // Sidebar Rendering
@@ -470,6 +443,31 @@ function bindEvents() {
 // ============================================================
 
 function init() {
+    // Initialize DOM references
+    dom = {
+        sidebar: $('#sidebar'),
+        sidebarToggle: $('#sidebar-toggle'),
+        toolNav: $('#tool-nav'),
+        welcomePage: $('#welcome-page'),
+        toolWorkspace: $('#tool-workspace'),
+        toolTitle: $('#tool-title'),
+        toolOptions: $('#tool-options'),
+        inputText: $('#input-text'),
+        outputText: $('#output-text'),
+        inputFormat: $('#input-format'),
+        outputFormat: $('#output-format'),
+        btnExecute: $('#btn-execute'),
+        btnSwap: $('#btn-swap'),
+        btnClearAll: $('#btn-clear-all'),
+        btnClearInput: $('#btn-clear-input'),
+        btnCopy: $('#btn-copy'),
+        autoPreprocess: $('#auto-preprocess'),
+        batchMode: $('#batch-mode'),
+        outputMessage: $('#output-message'),
+        globalSearch: $('#global-search'),
+        toast: $('#toast'),
+    };
+
     renderSidebar();
     bindEvents();
 
@@ -485,5 +483,9 @@ function init() {
     console.log(`[CryptoBox] Loaded ${Object.keys(tools).length} tools`);
 }
 
-// Start
-document.addEventListener('DOMContentLoaded', init);
+// Start - handle both cases: DOMContentLoaded already fired or not
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}
