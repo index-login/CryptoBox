@@ -597,6 +597,10 @@ const CipherTools = {
                 id: 'padding', label: 'Padding', type: 'select',
                 values: [
                     { value: 'pkcs#7', label: 'PKCS7 (默认)' },
+                    { value: 'zero', label: 'Zero Padding' },
+                    { value: 'iso10126', label: 'ISO 10126' },
+                    { value: 'ansix923', label: 'ANSI X9.23' },
+                    { value: 'iso7816-4', label: 'ISO 7816-4' },
                     { value: 'none', label: 'No Padding' },
                 ],
                 default: 'pkcs#7'
@@ -663,6 +667,68 @@ const CipherTools = {
             }
             return { hex, info };
         },
+        // 应用自定义 padding（除 PKCS7 和 none 之外）
+        _applyPadding(bytes, paddingMode, blockSize = 16) {
+            const padLen = blockSize - (bytes.length % blockSize);
+            const result = new Uint8Array(bytes.length + padLen);
+            result.set(bytes);
+            switch (paddingMode) {
+                case 'zero':
+                    // 全部补 0（如果数据已经是块大小整数倍则不补）
+                    if (bytes.length % blockSize === 0) {
+                        return bytes; // ZeroPadding 不补块
+                    }
+                    return result;
+                case 'iso10126':
+                    // 随机字节填充，最后一字节为填充长度
+                    for (let i = bytes.length; i < result.length - 1; i++) {
+                        result[i] = Math.floor(Math.random() * 256);
+                    }
+                    result[result.length - 1] = padLen;
+                    return result;
+                case 'ansix923':
+                    // 0填充，最后一字节为填充长度
+                    result[result.length - 1] = padLen;
+                    return result;
+                case 'iso7816-4':
+                    // 0x80 后跟 0
+                    result[bytes.length] = 0x80;
+                    return result;
+                default:
+                    return bytes;
+            }
+        },
+        // 移除自定义 padding
+        _removePadding(bytes, paddingMode) {
+            if (bytes.length === 0) return bytes;
+            switch (paddingMode) {
+                case 'zero': {
+                    // 移除尾部所有 0
+                    let end = bytes.length;
+                    while (end > 0 && bytes[end - 1] === 0) end--;
+                    return bytes.slice(0, end);
+                }
+                case 'iso10126':
+                case 'ansix923': {
+                    const padLen = bytes[bytes.length - 1];
+                    if (padLen > 0 && padLen <= 16) {
+                        return bytes.slice(0, bytes.length - padLen);
+                    }
+                    return bytes;
+                }
+                case 'iso7816-4': {
+                    // 找到最后一个 0x80
+                    let i = bytes.length - 1;
+                    while (i >= 0 && bytes[i] === 0) i--;
+                    if (i >= 0 && bytes[i] === 0x80) {
+                        return bytes.slice(0, i);
+                    }
+                    return bytes;
+                }
+                default:
+                    return bytes;
+            }
+        },
         encode(input, opts = {}) {
             if (typeof sm4 === 'undefined') {
                 return { error: 'SM4 库未加载，请检查网络连接' };
@@ -674,7 +740,9 @@ const CipherTools = {
                 const keyResult = this._parseToHex(opts.key, opts.keyFormat || 'utf8', 16);
                 if (keyResult.info) messages.push('密钥' + keyResult.info);
 
-                const smOpts = { padding: opts.padding || 'pkcs#7' };
+                const padding = opts.padding || 'pkcs#7';
+                const useCustomPadding = !['pkcs#7', 'none'].includes(padding);
+                const smOpts = { padding: useCustomPadding ? 'none' : padding };
 
                 if (opts.mode && opts.mode !== 'ecb') {
                     if (!opts.iv) return { error: `${opts.mode.toUpperCase()} 模式需要 IV` };
@@ -688,21 +756,29 @@ const CipherTools = {
                 let plainInput = input;
                 if (opts.gzip === 'compress' && typeof pako !== 'undefined') {
                     const compressed = pako.gzip(input);
-                    // Convert to hex string for sm4
                     plainInput = Array.from(compressed).map(b => b.toString(16).padStart(2, '0')).join('');
                     smOpts.output = 'array';
                     messages.push('已 Gzip 压缩');
                 }
 
                 let encrypted;
-                if (opts.gzip === 'compress') {
-                    // Input is hex bytes, pass as array
-                    const inputBytes = [];
-                    for (let i = 0; i < plainInput.length; i += 2) {
-                        inputBytes.push(parseInt(plainInput.substr(i, 2), 16));
+                if (opts.gzip === 'compress' || useCustomPadding) {
+                    // Convert input to byte array
+                    let inputBytes;
+                    if (opts.gzip === 'compress') {
+                        inputBytes = [];
+                        for (let i = 0; i < plainInput.length; i += 2) {
+                            inputBytes.push(parseInt(plainInput.substr(i, 2), 16));
+                        }
+                    } else {
+                        inputBytes = Array.from(new TextEncoder().encode(plainInput));
                     }
+                    // Apply custom padding
+                    if (useCustomPadding) {
+                        inputBytes = Array.from(this._applyPadding(new Uint8Array(inputBytes), padding));
+                    }
+                    smOpts.output = 'array';
                     encrypted = sm4.encrypt(inputBytes, keyResult.hex, smOpts);
-                    // Convert array output to hex
                     if (Array.isArray(encrypted)) {
                         encrypted = encrypted.map(b => b.toString(16).padStart(2, '0')).join('');
                     }
@@ -749,7 +825,9 @@ const CipherTools = {
                     }
                 }
 
-                const smOpts = { padding: opts.padding || 'pkcs#7' };
+                const padding = opts.padding || 'pkcs#7';
+                const useCustomPadding = !['pkcs#7', 'none'].includes(padding);
+                const smOpts = { padding: useCustomPadding ? 'none' : padding };
 
                 if (opts.mode && opts.mode !== 'ecb') {
                     if (!opts.iv) return { error: `${opts.mode.toUpperCase()} 模式需要 IV` };
@@ -759,28 +837,44 @@ const CipherTools = {
                     smOpts.iv = ivResult.hex;
                 }
 
+                // Decrypt as array when custom padding or gzip
+                if (useCustomPadding || opts.gzip === 'compress') {
+                    smOpts.output = 'array';
+                }
+
                 const decrypted = sm4.decrypt(cipherHex, keyResult.hex, smOpts);
 
-                // Gzip decompress after decrypt
+                // Process decrypted result
                 let output;
-                if (opts.gzip === 'compress' && typeof pako !== 'undefined') {
-                    try {
-                        // decrypted is a string, convert to bytes for ungzip
-                        let bytes;
-                        if (typeof decrypted === 'string') {
-                            bytes = new Uint8Array(decrypted.length / 2);
-                            for (let i = 0; i < decrypted.length; i += 2) {
-                                bytes[i / 2] = parseInt(decrypted.substr(i, 2), 16);
-                            }
-                        } else {
-                            bytes = new Uint8Array(decrypted);
+                if (useCustomPadding || opts.gzip === 'compress') {
+                    let bytes;
+                    if (Array.isArray(decrypted)) {
+                        bytes = new Uint8Array(decrypted);
+                    } else if (typeof decrypted === 'string') {
+                        bytes = new Uint8Array(decrypted.length / 2);
+                        for (let i = 0; i < decrypted.length; i += 2) {
+                            bytes[i / 2] = parseInt(decrypted.substr(i, 2), 16);
                         }
-                        output = pako.ungzip(bytes, { to: 'string' });
-                        messages.push('已 Gzip 解压');
-                    } catch {
-                        // Fallback: treat as plain text
-                        output = decrypted;
-                        messages.push('Gzip 解压失败，显示原始结果');
+                    } else {
+                        return { error: '解密失败：可能是密钥/IV错误或Padding不匹配' };
+                    }
+
+                    // Remove custom padding
+                    if (useCustomPadding) {
+                        bytes = this._removePadding(bytes, padding);
+                    }
+
+                    // Gzip decompress
+                    if (opts.gzip === 'compress' && typeof pako !== 'undefined') {
+                        try {
+                            output = pako.ungzip(bytes, { to: 'string' });
+                            messages.push('已 Gzip 解压');
+                        } catch {
+                            output = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+                            messages.push('Gzip 解压失败，显示原始结果');
+                        }
+                    } else {
+                        output = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
                     }
                 } else {
                     output = decrypted;
