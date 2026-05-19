@@ -270,6 +270,14 @@ function createBlockCipher(config) {
                 ],
                 default: 'base64'
             },
+            {
+                id: 'gzip', label: 'Gzip', type: 'select',
+                values: [
+                    { value: 'none', label: '不使用' },
+                    { value: 'compress', label: '加密前压缩 / 解密后解压' },
+                ],
+                default: 'none'
+            },
         ],
 
         encode(input, opts = {}) {
@@ -309,7 +317,15 @@ function createBlockCipher(config) {
                 };
                 if (iv) cfg.iv = iv;
 
-                const encrypted = algorithm.encrypt(input, keyResult.wordArray, cfg);
+                // Gzip compress before encrypt
+                let plaintext = input;
+                if (opts.gzip === 'compress' && typeof pako !== 'undefined') {
+                    const compressed = pako.gzip(input);
+                    plaintext = CipherHelper.bytesToWordArray(compressed);
+                    messages.push('已 Gzip 压缩');
+                }
+
+                const encrypted = algorithm.encrypt(plaintext, keyResult.wordArray, cfg);
                 const output = CipherHelper.formatCiphertext(encrypted.ciphertext, outputFormat);
 
                 return {
@@ -373,13 +389,31 @@ function createBlockCipher(config) {
                 // Try UTF-8 first, fallback to Hex
                 let output;
                 try {
-                    output = decrypted.toString(CryptoJS.enc.Utf8);
-                    if (!output && decrypted.sigBytes > 0) {
-                        // Decryption returned empty UTF-8, fallback to Hex
+                    // Gzip decompress after decrypt
+                    if (opts.gzip === 'compress' && typeof pako !== 'undefined') {
+                        const bytes = CipherHelper.wordArrayToBytes(decrypted);
+                        const decompressed = pako.ungzip(bytes, { to: 'string' });
+                        output = decompressed;
+                        messages.push('已 Gzip 解压');
+                    } else {
+                        output = decrypted.toString(CryptoJS.enc.Utf8);
+                        if (!output && decrypted.sigBytes > 0) {
+                            output = '(无法以UTF-8显示) Hex: ' + decrypted.toString(CryptoJS.enc.Hex);
+                        }
+                    }
+                } catch (gzErr) {
+                    // Gzip decompress failed, try plain UTF-8
+                    try {
+                        output = decrypted.toString(CryptoJS.enc.Utf8);
+                        if (!output && decrypted.sigBytes > 0) {
+                            output = '(无法以UTF-8显示) Hex: ' + decrypted.toString(CryptoJS.enc.Hex);
+                        }
+                        if (opts.gzip === 'compress') {
+                            messages.push('Gzip 解压失败，显示原始解密结果');
+                        }
+                    } catch {
                         output = '(无法以UTF-8显示) Hex: ' + decrypted.toString(CryptoJS.enc.Hex);
                     }
-                } catch {
-                    output = '(无法以UTF-8显示) Hex: ' + decrypted.toString(CryptoJS.enc.Hex);
                 }
 
                 if (!output) {
@@ -553,8 +587,11 @@ const CipherTools = {
                 values: [
                     { value: 'ecb', label: 'ECB' },
                     { value: 'cbc', label: 'CBC' },
+                    { value: 'ctr', label: 'CTR' },
+                    { value: 'cfb', label: 'CFB' },
+                    { value: 'ofb', label: 'OFB' },
                 ],
-                default: 'ecb'
+                default: 'cbc'
             },
             {
                 id: 'padding', label: 'Padding', type: 'select',
@@ -577,8 +614,8 @@ const CipherTools = {
                 default: 'utf8'
             },
             {
-                id: 'iv', label: 'IV (CBC模式)', type: 'text',
-                placeholder: 'CBC 模式必需 (16字节)', default: ''
+                id: 'iv', label: 'IV (ECB外均需要)', type: 'text',
+                placeholder: 'ECB 以外模式必需 (16字节)', default: ''
             },
             {
                 id: 'ivFormat', label: 'IV 格式', type: 'select',
@@ -591,10 +628,18 @@ const CipherTools = {
             {
                 id: 'outputFormat', label: '密文格式', type: 'select',
                 values: [
-                    { value: 'hex', label: 'Hex' },
                     { value: 'base64', label: 'Base64' },
+                    { value: 'hex', label: 'Hex' },
                 ],
-                default: 'hex'
+                default: 'base64'
+            },
+            {
+                id: 'gzip', label: 'Gzip', type: 'select',
+                values: [
+                    { value: 'none', label: '不使用' },
+                    { value: 'compress', label: '加密前压缩 / 解密后解压' },
+                ],
+                default: 'none'
             },
         ],
         _parseToHex(str, format, requiredLen) {
@@ -631,15 +676,39 @@ const CipherTools = {
 
                 const smOpts = { padding: opts.padding || 'pkcs#7' };
 
-                if (opts.mode === 'cbc') {
-                    if (!opts.iv) return { error: 'CBC 模式需要 IV' };
+                if (opts.mode && opts.mode !== 'ecb') {
+                    if (!opts.iv) return { error: `${opts.mode.toUpperCase()} 模式需要 IV` };
                     const ivResult = this._parseToHex(opts.iv, opts.ivFormat || 'utf8', 16);
                     if (ivResult.info) messages.push('IV' + ivResult.info);
-                    smOpts.mode = 'cbc';
+                    smOpts.mode = opts.mode;
                     smOpts.iv = ivResult.hex;
                 }
 
-                const encrypted = sm4.encrypt(input, keyResult.hex, smOpts);
+                // Gzip compress before encrypt
+                let plainInput = input;
+                if (opts.gzip === 'compress' && typeof pako !== 'undefined') {
+                    const compressed = pako.gzip(input);
+                    // Convert to hex string for sm4
+                    plainInput = Array.from(compressed).map(b => b.toString(16).padStart(2, '0')).join('');
+                    smOpts.output = 'array';
+                    messages.push('已 Gzip 压缩');
+                }
+
+                let encrypted;
+                if (opts.gzip === 'compress') {
+                    // Input is hex bytes, pass as array
+                    const inputBytes = [];
+                    for (let i = 0; i < plainInput.length; i += 2) {
+                        inputBytes.push(parseInt(plainInput.substr(i, 2), 16));
+                    }
+                    encrypted = sm4.encrypt(inputBytes, keyResult.hex, smOpts);
+                    // Convert array output to hex
+                    if (Array.isArray(encrypted)) {
+                        encrypted = encrypted.map(b => b.toString(16).padStart(2, '0')).join('');
+                    }
+                } else {
+                    encrypted = sm4.encrypt(input, keyResult.hex, smOpts);
+                }
                 let output = encrypted;
                 if (opts.outputFormat === 'base64') {
                     // hex to base64
@@ -682,20 +751,46 @@ const CipherTools = {
 
                 const smOpts = { padding: opts.padding || 'pkcs#7' };
 
-                if (opts.mode === 'cbc') {
-                    if (!opts.iv) return { error: 'CBC 模式需要 IV' };
+                if (opts.mode && opts.mode !== 'ecb') {
+                    if (!opts.iv) return { error: `${opts.mode.toUpperCase()} 模式需要 IV` };
                     const ivResult = this._parseToHex(opts.iv, opts.ivFormat || 'utf8', 16);
                     if (ivResult.info) messages.push('IV' + ivResult.info);
-                    smOpts.mode = 'cbc';
+                    smOpts.mode = opts.mode;
                     smOpts.iv = ivResult.hex;
                 }
 
                 const decrypted = sm4.decrypt(cipherHex, keyResult.hex, smOpts);
-                if (!decrypted) {
+
+                // Gzip decompress after decrypt
+                let output;
+                if (opts.gzip === 'compress' && typeof pako !== 'undefined') {
+                    try {
+                        // decrypted is a string, convert to bytes for ungzip
+                        let bytes;
+                        if (typeof decrypted === 'string') {
+                            bytes = new Uint8Array(decrypted.length / 2);
+                            for (let i = 0; i < decrypted.length; i += 2) {
+                                bytes[i / 2] = parseInt(decrypted.substr(i, 2), 16);
+                            }
+                        } else {
+                            bytes = new Uint8Array(decrypted);
+                        }
+                        output = pako.ungzip(bytes, { to: 'string' });
+                        messages.push('已 Gzip 解压');
+                    } catch {
+                        // Fallback: treat as plain text
+                        output = decrypted;
+                        messages.push('Gzip 解压失败，显示原始结果');
+                    }
+                } else {
+                    output = decrypted;
+                }
+
+                if (!output) {
                     return { error: '解密失败：可能是密钥/IV错误或Padding不匹配' };
                 }
 
-                return { output: decrypted, info: messages.length > 0 ? messages.join('; ') : null };
+                return { output, info: messages.length > 0 ? messages.join('; ') : null };
             } catch (e) {
                 return { error: `SM4 解密失败: ${e.message}。可能原因：密钥/IV错误、Padding不匹配` };
             }
