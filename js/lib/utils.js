@@ -273,46 +273,26 @@ const UtilsTools = {
 
                 const alg = header.alg || 'unknown';
                 const now = Math.floor(Date.now() / 1000);
-                const infoParts = [];
                 const messages = [];
+                const jwtData = { header, payload };
 
-                // Header
-                const output = [JSON.stringify(header, null, 2), ''];
-
-                // Payload - 替换时间戳为可读格式
-                const payloadDisplay = {};
-                for (const [key, value] of Object.entries(payload)) {
-                    if (['iat', 'nbf', 'exp'].includes(key) && typeof value === 'number') {
-                        payloadDisplay[key] = `${value}  (${this._formatTimestamp(value)})`;
-                    } else {
-                        payloadDisplay[key] = value;
-                    }
+                // Time annotations for rich display
+                const timeAnnotations = {};
+                if (payload.iat && typeof payload.iat === 'number') {
+                    timeAnnotations.iat = this._formatTimestamp(payload.iat);
                 }
-                output.push(JSON.stringify(payloadDisplay, null, 2));
-
-                // 一行摘要
-                infoParts.push(this._getAlgorithmName(alg));
-
-                if (payload.iat) infoParts.push(`签发 ${this._formatTimestamp(payload.iat)}`);
-
-                if (payload.exp) {
-                    const remaining = payload.exp - now;
-                    if (remaining < 0) {
-                        infoParts.push(`已过期 ${this._formatDuration(-remaining)}`);
-                        messages.push('Token 已过期');
-                    } else {
-                        infoParts.push(`剩余 ${this._formatDuration(remaining)}`);
-                    }
+                if (payload.nbf && typeof payload.nbf === 'number') {
+                    timeAnnotations.nbf = this._formatTimestamp(payload.nbf);
                 }
-
-                if (parts[2]) {
-                    infoParts.push('有签名');
+                if (payload.exp && typeof payload.exp === 'number') {
+                    timeAnnotations.exp = this._formatTimestamp(payload.exp);
                 }
+                jwtData.timeAnnotations = timeAnnotations;
 
-                output.push('');
-                output.push(infoParts.join(' | '));
+                // Signature
+                jwtData.signature = parts[2] || null;
 
-                // 签名验证
+                // Signature verification
                 if (opts.secret && alg !== 'none') {
                     const secretFormat = opts.secretFormat || 'utf8';
                     const algType = this._getAlgorithmType(alg);
@@ -328,27 +308,37 @@ const UtilsTools = {
                     } else {
                         verifyResult = { error: `不支持 ${alg} 验证` };
                     }
-                    if (verifyResult.error) {
-                        output.push(verifyResult.error);
-                    } else if (verifyResult.valid) {
-                        output.push('Signature Verified');
-                        messages.push('签名验证通过');
+                    if (!verifyResult.error) {
+                        jwtData.verifyStatus = { valid: verifyResult.valid };
+                        messages.push(verifyResult.valid ? '签名验证通过' : '签名验证失败');
                     } else {
-                        output.push('Invalid Signature');
-                        messages.push('签名验证失败');
+                        jwtData.verifyStatus = { valid: false, error: verifyResult.error };
                     }
                 }
 
-                // 安全警告
-                const warnings = this._getSecurityWarnings(header, payload, parts);
-                for (const w of warnings) {
-                    const icon = w.level === 'CRITICAL' ? '[!!]' : w.level === 'WARN' ? '[!]' : '[i]';
-                    output.push(`${icon} ${w.msg}`);
+                // Warnings
+                jwtData.warnings = this._getSecurityWarnings(header, payload, parts);
+                if (payload.exp) {
+                    const remaining = payload.exp - now;
+                    if (remaining < 0) messages.push('Token 已过期');
                 }
+
+                // Plain text output (for textarea / copy)
+                const output = [JSON.stringify(header, null, 2), '', JSON.stringify(payload, null, 2)];
+                const infoParts = [this._getAlgorithmName(alg)];
+                if (payload.iat) infoParts.push(`签发 ${this._formatTimestamp(payload.iat)}`);
+                if (payload.exp) {
+                    const remaining = payload.exp - now;
+                    if (remaining < 0) infoParts.push(`已过期 ${this._formatDuration(-remaining)}`);
+                    else infoParts.push(`剩余 ${this._formatDuration(remaining)}`);
+                }
+                if (parts[2]) infoParts.push('有签名');
+                output.push('', infoParts.join(' | '));
 
                 return {
                     output: output.join('\n'),
-                    info: messages.length > 0 ? messages.join('; ') : null
+                    info: messages.length > 0 ? messages.join('; ') : null,
+                    jwtData
                 };
             } catch (e) {
                 return { error: `JWT 解析失败: ${e.message}` };

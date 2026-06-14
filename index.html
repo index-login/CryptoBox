@@ -243,6 +243,23 @@
                     <textarea id="output-text" rows="6" readonly
                         class="w-full bg-dark-700 border border-dark-500 rounded-lg px-4 py-3 text-sm font-mono resize-y focus:outline-none placeholder-gray-600"
                         spellcheck="false"></textarea>
+                    <!-- Rich JWT display (replaces textarea for JWT tool) -->
+                    <div id="jwt-display" class="hidden">
+                        <div class="jwt-panel jwt-header">
+                            <div class="jwt-panel-title">Header</div>
+                            <pre class="jwt-panel-json"></pre>
+                        </div>
+                        <div class="jwt-panel jwt-payload">
+                            <div class="jwt-panel-title">Payload</div>
+                            <pre class="jwt-panel-json"></pre>
+                        </div>
+                        <div class="jwt-panel jwt-signature">
+                            <div class="jwt-panel-title">Signature</div>
+                            <pre class="jwt-panel-json"></pre>
+                        </div>
+                        <div id="jwt-verify-status" class="hidden"></div>
+                        <div id="jwt-warnings" class="hidden"></div>
+                    </div>
                     <!-- Error/info message -->
                     <div id="output-message" class="mt-2 text-xs hidden"></div>
                 </div>

@@ -136,6 +136,16 @@ function selectTool(toolId) {
     dom.outputText.value = '';
     hideMessage();
 
+    // Toggle JWT rich display vs textarea
+    const isJwt = toolId === 'jwt';
+    dom.outputText.classList.toggle('hidden', isJwt);
+    dom.jwtDisplay.classList.toggle('hidden', !isJwt);
+    if (isJwt) {
+        dom.jwtDisplay.querySelectorAll('.jwt-panel-json').forEach(el => el.textContent = '');
+        dom.jwtDisplay.querySelector('#jwt-verify-status').classList.add('hidden');
+        dom.jwtDisplay.querySelector('#jwt-warnings').classList.add('hidden');
+    }
+
     // Close mobile sidebar
     closeMobileSidebar();
 }
@@ -317,6 +327,10 @@ function execute() {
         showMessage(result.error, 'error');
     } else {
         dom.outputText.value = result.output || '';
+        // Render JWT rich display
+        if (currentTool.id === 'jwt' && result.jwtData) {
+            renderJwtDisplay(result.jwtData);
+        }
         // Save to history on success
         addToHistory(input, result.output, opts);
         if (action !== currentAction && currentAction === 'auto') {
@@ -401,6 +415,13 @@ function bindEvents() {
         dom.inputText.value = '';
         dom.outputText.value = '';
         hideMessage();
+        if (dom.jwtDisplay) {
+            dom.jwtDisplay.querySelectorAll('.jwt-panel-json').forEach(el => el.textContent = '');
+            const vs = dom.jwtDisplay.querySelector('#jwt-verify-status');
+            if (vs) vs.classList.add('hidden');
+            const ws = dom.jwtDisplay.querySelector('#jwt-warnings');
+            if (ws) ws.classList.add('hidden');
+        }
     });
 
     // Clear input
@@ -435,6 +456,13 @@ function bindEvents() {
             dom.inputText.value = '';
             dom.outputText.value = '';
             hideMessage();
+            if (dom.jwtDisplay) {
+                dom.jwtDisplay.querySelectorAll('.jwt-panel-json').forEach(el => el.textContent = '');
+                const vs = dom.jwtDisplay.querySelector('#jwt-verify-status');
+                if (vs) vs.classList.add('hidden');
+                const ws = dom.jwtDisplay.querySelector('#jwt-warnings');
+                if (ws) ws.classList.add('hidden');
+            }
         }
         // Ctrl+K: Focus search
         if (e.ctrlKey && e.key === 'k') {
@@ -491,6 +519,89 @@ function bindEvents() {
 }
 
 // ============================================================
+// JWT Rich Display
+// ============================================================
+
+function highlightJson(obj, timeFields) {
+    const json = JSON.stringify(obj, null, 2);
+    return json.replace(/"([^"]+)"(?=\s*:)/g, (_, key) => {
+        return `<span class="jwt-key">"${key}"</span>`;
+    }).replace(/:\s*"([^"]*?)"/g, (match, str, offset, full) => {
+        return `: <span class="jwt-string">"${escapeHtml(str)}"</span>`;
+    }).replace(/:\s*(-?\d+\.?\d*)/g, (_, num) => {
+        return `: <span class="jwt-number">${num}</span>`;
+    }).replace(/:\s*(true|false)/g, (_, bool) => {
+        return `: <span class="jwt-bool">${bool}</span>`;
+    }).replace(/:\s*(null)/g, (_, n) => {
+        return `: <span class="jwt-null">${n}</span>`;
+    }).replace(/([[\]{}])/g, (_, b) => {
+        return `<span class="jwt-bracket">${b}</span>`;
+    });
+}
+
+function renderJwtDisplay(data) {
+    const panels = dom.jwtDisplay.querySelectorAll('.jwt-panel');
+    const headerPre = panels[0].querySelector('.jwt-panel-json');
+    const payloadPre = panels[1].querySelector('.jwt-panel-json');
+    const sigPre = panels[2].querySelector('.jwt-panel-json');
+
+    // Header
+    headerPre.innerHTML = highlightJson(data.header);
+
+    // Payload with time annotations
+    let payloadJson = JSON.stringify(data.payload, null, 2);
+    payloadJson = payloadJson.replace(/"([^"]+)"(?=\s*:)/g, (_, key) => {
+        return `<span class="jwt-key">"${key}"</span>`;
+    }).replace(/:\s*"([^"]*?)"/g, (match, str) => {
+        return `: <span class="jwt-string">"${escapeHtml(str)}"</span>`;
+    }).replace(/:\s*(true|false)/g, (_, bool) => {
+        return `: <span class="jwt-bool">${bool}</span>`;
+    }).replace(/:\s*(null)/g, (_, n) => {
+        return `: <span class="jwt-null">${n}</span>`;
+    }).replace(/([[\]{}])/g, (_, b) => {
+        return `<span class="jwt-bracket">${b}</span>`;
+    });
+    // Annotate time fields
+    if (data.timeAnnotations) {
+        for (const [field, display] of Object.entries(data.timeAnnotations)) {
+            const re = new RegExp(`(<span class="jwt-key">"${field}"</span>\\s*:\\s*<span class="jwt-number">)(\\d+)(</span>)`);
+            payloadJson = payloadJson.replace(re, `$1$2 <span class="jwt-time-annotation">(${display})</span>$3`);
+        }
+    }
+    payloadPre.innerHTML = payloadJson;
+
+    // Signature
+    if (data.signature) {
+        sigPre.innerHTML = `<span class="jwt-string">${escapeHtml(data.signature)}</span>`;
+    } else {
+        sigPre.innerHTML = '<span class="jwt-null">(无签名)</span>';
+    }
+
+    // Verify status
+    const verifyEl = dom.jwtDisplay.querySelector('#jwt-verify-status');
+    if (data.verifyStatus) {
+        verifyEl.classList.remove('hidden', 'valid', 'invalid');
+        verifyEl.classList.add(data.verifyStatus.valid ? 'valid' : 'invalid');
+        verifyEl.textContent = data.verifyStatus.valid ? '✓ Signature Verified' : '✗ Invalid Signature';
+    } else {
+        verifyEl.classList.add('hidden');
+    }
+
+    // Warnings
+    const warningsEl = dom.jwtDisplay.querySelector('#jwt-warnings');
+    if (data.warnings && data.warnings.length > 0) {
+        warningsEl.classList.remove('hidden');
+        warningsEl.innerHTML = data.warnings.map(w => {
+            const cls = w.level === 'CRITICAL' ? 'critical' : w.level === 'WARN' ? 'warn' : 'info';
+            const icon = w.level === 'CRITICAL' ? '[!!]' : w.level === 'WARN' ? '[!]' : '[i]';
+            return `<div class="jwt-warn-item ${cls}">${icon} ${escapeHtml(w.msg)}</div>`;
+        }).join('');
+    } else {
+        warningsEl.classList.add('hidden');
+    }
+}
+
+// ============================================================
 // Initialization
 // ============================================================
 
@@ -522,6 +633,7 @@ function init() {
         historyList: $('#history-list'),
         historyToggle: $('#history-toggle'),
         btnClearHistory: $('#btn-clear-history'),
+        jwtDisplay: $('#jwt-display'),
     };
 
     renderSidebar();
