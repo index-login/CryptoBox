@@ -257,13 +257,17 @@ function renderToolOptions(tool) {
             currentAction = e.target.value;
             if (currentTool && currentTool.id === 'jwt') {
                 if (currentAction === 'decode') {
-                    // Create mode: dual input
+                    // Create mode: dual input, plain output textarea
                     dom.inputArea.classList.add('hidden');
                     dom.jwtInputArea.classList.remove('hidden');
+                    dom.outputText.classList.remove('hidden');
+                    dom.jwtDisplay.classList.add('hidden');
                 } else {
-                    // Parse mode: single input
+                    // Parse mode: single input, rich display (hidden until executed)
                     dom.inputArea.classList.remove('hidden');
                     dom.jwtInputArea.classList.add('hidden');
+                    dom.outputText.classList.add('hidden');
+                    dom.jwtDisplay.classList.add('hidden');
                     dom.inputText.placeholder = '粘贴完整 JWT Token\neyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIi...';
                 }
             }
@@ -383,10 +387,20 @@ function execute() {
         showMessage(result.error, 'error');
     } else {
         dom.outputText.value = result.output || '';
-        // Render JWT rich display
-        if (currentTool.id === 'jwt' && result.jwtData) {
-            renderJwtDisplay(result.jwtData);
+
+        // JWT: toggle rich display vs textarea based on action
+        if (currentTool.id === 'jwt') {
+            const isParse = currentAction === 'encode' || currentAction === 'auto';
+            if (isParse && result.jwtData) {
+                dom.outputText.classList.add('hidden');
+                dom.jwtDisplay.classList.remove('hidden');
+                renderJwtDisplay(result.jwtData);
+            } else {
+                dom.outputText.classList.remove('hidden');
+                dom.jwtDisplay.classList.add('hidden');
+            }
         }
+
         // Save to history on success
         addToHistory(input, result.output, opts);
         if (action !== currentAction && currentAction === 'auto') {
