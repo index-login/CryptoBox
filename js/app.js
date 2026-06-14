@@ -144,6 +144,11 @@ function selectTool(toolId) {
         dom.jwtDisplay.querySelectorAll('.jwt-panel-json').forEach(el => el.textContent = '');
         dom.jwtDisplay.querySelector('#jwt-verify-status').classList.add('hidden');
         dom.jwtDisplay.querySelector('#jwt-warnings').classList.add('hidden');
+        dom.inputText.placeholder = '粘贴完整 JWT Token\neyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIi...';
+        dom.inputText.rows = 4;
+    } else {
+        dom.inputText.placeholder = '在此输入内容...';
+        dom.inputText.rows = 6;
     }
 
     // Close mobile sidebar
@@ -175,6 +180,9 @@ function renderToolOptions(tool) {
                 <input type="radio" name="action" value="decode" class="text-accent">
                 <span class="text-sm">${getActionLabel(tool, 'decode')}</span>
             </label>
+            ${tool.id === 'jwt' ? `
+            <button id="jwt-fill-example" class="text-xs text-accent hover:underline ml-auto">填入示例</button>
+            ` : ''}
         </div>
     `;
 
@@ -240,8 +248,31 @@ function renderToolOptions(tool) {
     container.querySelectorAll('input[name="action"]').forEach(radio => {
         radio.addEventListener('change', (e) => {
             currentAction = e.target.value;
+            if (currentTool && currentTool.id === 'jwt') {
+                if (currentAction === 'decode') {
+                    dom.inputText.placeholder = '输入 JSON 格式的 Payload\n{"sub":"1234567890","name":"John Doe","iat":1700000000}';
+                } else {
+                    dom.inputText.placeholder = '粘贴完整 JWT Token\neyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIi...';
+                }
+            }
         });
     });
+
+    // Bind JWT example button
+    const jwtExampleBtn = container.querySelector('#jwt-fill-example');
+    if (jwtExampleBtn) {
+        jwtExampleBtn.addEventListener('click', () => {
+            if (currentAction === 'decode') {
+                dom.inputText.value = '{\n  "sub": "1234567890",\n  "name": "John Doe",\n  "admin": true,\n  "iat": 1516239022\n}';
+                const secretInput = container.querySelector('[data-option="secret"]');
+                if (secretInput) secretInput.value = 'your-256-bit-secret';
+            } else {
+                dom.inputText.value = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.KMUFsIDTnFbyG3Ar4TANTwF1C9Khb_qSahLuKKPWHCE';
+                const secretInput = container.querySelector('[data-option="secret"]');
+                if (secretInput) secretInput.value = 'your-256-bit-secret';
+            }
+        });
+    }
 
     // Bind key length hints
     container.querySelectorAll('input[data-option="key"], input[data-option="iv"]').forEach(input => {
@@ -257,6 +288,9 @@ function getActionLabel(tool, action) {
         return action === 'encode' ? '编码' : '解码';
     }
     if (tool.category === 'utils') {
+        if (tool.id === 'jwt') {
+            return action === 'encode' ? '解析 JWT' : '创建 JWT';
+        }
         return action === 'encode' ? '解析/转换' : '反向转换';
     }
     return action === 'encode' ? '加密' : '解密';
