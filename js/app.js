@@ -195,10 +195,10 @@ function renderToolOptions(tool) {
 
     if (tool.options && tool.options.length > 0) {
         // Separate key/IV options from other options
-        const keyIvOpts = tool.options.filter(o => o.id === 'key' || o.id === 'iv' || o.id === 'publicKey' || o.id === 'privateKey');
+        const keyIvOpts = tool.options.filter(o => o.id === 'key' || o.id === 'iv');
         const formatOpts = tool.options.filter(o => o.id === 'keyFormat' || o.id === 'ivFormat');
         const otherOpts = tool.options.filter(o => 
-            !['key', 'iv', 'keyFormat', 'ivFormat', 'publicKey', 'privateKey'].includes(o.id)
+            !['key', 'iv', 'keyFormat', 'ivFormat'].includes(o.id)
         );
 
         // Render other options in grid
@@ -297,9 +297,64 @@ function renderToolOptions(tool) {
     }
 
     // Bind key length hints
-    container.querySelectorAll('input[data-option="key"], input[data-option="iv"], textarea[data-option="publicKey"], textarea[data-option="privateKey"]').forEach(input => {
+    container.querySelectorAll('input[data-option="key"], input[data-option="iv"]').forEach(input => {
         input.addEventListener('input', updateKeyLengthHint);
     });
+
+    // RSA 密钥自动格式化 + 密钥长度检测
+    if (currentTool && currentTool.id === 'rsa') {
+        const keyTextarea = container.querySelector('textarea[data-option="key"]');
+        const keySizeSelect = container.querySelector('select[data-option="keySize"]');
+        if (keyTextarea) {
+            const autoFormatKey = () => {
+                const original = keyTextarea.value;
+                if (!original.trim()) return;
+                const result = RSATools.normalizePemKey(original);
+                if (result.changed) {
+                    keyTextarea.value = result.key;
+                }
+                // 自动匹配密钥长度下拉框
+                if (result.size && keySizeSelect) {
+                    const sizeStr = String(result.size);
+                    const hasOption = [...keySizeSelect.options].some(o => o.value === sizeStr);
+                    if (hasOption && keySizeSelect.value !== sizeStr) {
+                        keySizeSelect.value = sizeStr;
+                    }
+                }
+                // 构建提示信息
+                const parts = [];
+                if (result.changed) parts.push('密钥已自动格式化');
+                if (result.type) parts.push(result.type.includes('PRIVATE') ? '识别为私钥' : '识别为公钥');
+                if (result.size) parts.push(`${result.size} bit`);
+                if (parts.length > 0) showToast(parts.join(' · '));
+            };
+            keyTextarea.addEventListener('blur', autoFormatKey);
+            keyTextarea.addEventListener('paste', () => setTimeout(autoFormatKey, 50));
+        }
+    }
+
+    // SM2 密钥自动格式化
+    if (currentTool && currentTool.id === 'sm2') {
+        const keyInput = container.querySelector('textarea[data-option="key"]');
+        if (keyInput) {
+            const autoFormatKey = () => {
+                const original = keyInput.value;
+                if (!original.trim()) return;
+                const result = SM2Tools.normalizeSm2Key(original);
+                if (result.changed) {
+                    keyInput.value = result.key;
+                }
+                const parts = [];
+                if (result.fromPem) parts.push('PEM 已转为 Hex');
+                else if (result.changed) parts.push('密钥已自动格式化');
+                if (result.type) parts.push(result.type === 'public' ? '识别为公钥' : '识别为私钥');
+                if (result.addedPrefix) parts.push('已补全 04 前缀');
+                if (parts.length > 0) showToast(parts.join(' · '));
+            };
+            keyInput.addEventListener('blur', autoFormatKey);
+            keyInput.addEventListener('paste', () => setTimeout(autoFormatKey, 50));
+        }
+    }
 }
 
 function getActionLabel(tool, action) {

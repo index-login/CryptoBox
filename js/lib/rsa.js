@@ -5,6 +5,100 @@
  */
 
 const RSATools = {
+    /**
+     * PEM 密钥自动格式化
+     * 支持：自动补全头尾、清理空格换行、64 字符换行、自动识别公钥/私钥、检测密钥长度
+     * @returns {{ key: string, type: string, size: number|null, changed: boolean }}
+     */
+    normalizePemKey(input) {
+        const fail = (key) => ({ key, type: '', size: null, changed: false });
+        if (!input || typeof input !== 'string') return fail(input);
+        const original = input;
+        let raw = input.trim();
+
+        // 1. 尝试提取已有的 PEM 头尾
+        const pemHeaderMatch = raw.match(/-----BEGIN\s+(.+?)-----/);
+        const pemFooterMatch = raw.match(/-----END\s+(.+?)-----/);
+
+        let keyType = '';
+
+        if (pemHeaderMatch && pemFooterMatch) {
+            keyType = pemHeaderMatch[1].trim();
+            const headerEnd = raw.indexOf('-----', raw.indexOf('-----BEGIN'));
+            const footerStart = raw.lastIndexOf('-----');
+            raw = raw.substring(headerEnd, footerStart);
+        } else if (pemHeaderMatch) {
+            keyType = pemHeaderMatch[1].trim();
+            const headerEnd = raw.indexOf('-----', raw.indexOf('-----BEGIN'));
+            raw = raw.substring(headerEnd);
+        } else if (pemFooterMatch) {
+            keyType = pemFooterMatch[1].trim();
+            const footerStart = raw.lastIndexOf('-----');
+            raw = raw.substring(0, footerStart);
+        } else {
+            const cleaned = raw.replace(/\s+/g, '');
+            if (!/^[A-Za-z0-9+/=]+$/.test(cleaned)) {
+                return fail(original);
+            }
+            if (typeof JSEncrypt !== 'undefined') {
+                const testPub = new JSEncrypt();
+                testPub.setPublicKey(cleaned);
+                if (testPub.getPublicKey()) {
+                    keyType = 'PUBLIC KEY';
+                } else {
+                    const testPriv = new JSEncrypt();
+                    testPriv.setPrivateKey(cleaned);
+                    if (testPriv.getPrivateKey()) {
+                        keyType = 'RSA PRIVATE KEY';
+                    }
+                }
+            }
+            if (!keyType) {
+                keyType = cleaned.length > 300 ? 'RSA PRIVATE KEY' : 'PUBLIC KEY';
+            }
+            raw = cleaned;
+        }
+
+        // 2. 清理 base64 内容
+        let base64Content = raw.replace(/\s+/g, '');
+        if (!/^[A-Za-z0-9+/=]+$/.test(base64Content)) {
+            return fail(original);
+        }
+
+        // 3. 每 64 字符换行
+        const lines = [];
+        for (let i = 0; i < base64Content.length; i += 64) {
+            lines.push(base64Content.substring(i, i + 64));
+        }
+        const formatted = `-----BEGIN ${keyType}-----\n${lines.join('\n')}\n-----END ${keyType}-----`;
+
+        // 4. 检测密钥实际 bit 长度
+        let keySize = null;
+        if (typeof JSEncrypt !== 'undefined') {
+            try {
+                const crypt = new JSEncrypt();
+                if (keyType.includes('PRIVATE')) {
+                    crypt.setPrivateKey(formatted);
+                } else {
+                    crypt.setPublicKey(formatted);
+                }
+                const keyObj = crypt.getKey();
+                if (keyObj && keyObj.n) {
+                    keySize = keyObj.n.bitLength();
+                }
+            } catch (e) {
+                // 检测失败不影响格式化结果
+            }
+        }
+
+        return {
+            key: formatted,
+            type: keyType,
+            size: keySize,
+            changed: formatted !== original
+        };
+    },
+
     rsa: {
         id: 'rsa',
         name: 'RSA 加解密',
@@ -15,8 +109,8 @@ const RSATools = {
             {
                 id: 'operation', label: '操作', type: 'select',
                 values: [
-                    { value: 'encrypt', label: '加密 (用公钥)' },
-                    { value: 'decrypt', label: '解密 (用私钥)' },
+                    { value: 'encrypt', label: '加密 (公钥)' },
+                    { value: 'decrypt', label: '解密 (私钥)' },
                     { value: 'genkey', label: '生成密钥对' },
                 ],
                 default: 'encrypt'
@@ -31,13 +125,8 @@ const RSATools = {
                 default: '2048'
             },
             {
-                id: 'publicKey', label: '公钥 (加密/验签)', type: 'textarea',
-                placeholder: '-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----',
-                default: ''
-            },
-            {
-                id: 'privateKey', label: '私钥 (解密/签名)', type: 'textarea',
-                placeholder: '-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----',
+                id: 'key', label: '公钥/私钥 (PEM格式)', type: 'textarea',
+                placeholder: '粘贴 PEM 格式密钥\n-----BEGIN PUBLIC KEY-----\nMIIBIjANBg...\n-----END PUBLIC KEY-----',
                 default: ''
             },
         ],
@@ -51,25 +140,25 @@ const RSATools = {
             try {
                 switch (operation) {
                     case 'encrypt': {
-                        const pubKey = (opts.publicKey || '').trim();
-                        if (!pubKey) return { error: '请输入公钥（右侧公钥框）' };
+                        if (!opts.key) return { error: '请输入公钥 (PEM 格式)' };
+                        const { key: pubKey } = RSATools.normalizePemKey(opts.key);
                         const encrypt = new JSEncrypt();
                         encrypt.setPublicKey(pubKey);
                         const encrypted = encrypt.encrypt(input);
                         if (!encrypted) {
-                            return { error: '加密失败：公钥格式错误或明文过长（RSA 受限于密钥长度）' };
+                            return { error: '加密失败：公钥格式错误或明文过长（RSA 加密长度受限于密钥长度）' };
                         }
                         return { output: encrypted };
                     }
                     case 'decrypt': {
-                        const priKey = (opts.privateKey || '').trim();
-                        if (!priKey) return { error: '请输入私钥（右侧私钥框）' };
+                        if (!opts.key) return { error: '请输入私钥 (PEM 格式)' };
+                        const { key: privKey } = RSATools.normalizePemKey(opts.key);
                         const decrypt = new JSEncrypt();
-                        decrypt.setPrivateKey(priKey);
+                        decrypt.setPrivateKey(privKey);
                         const ciphertext = input.trim().replace(/\s/g, '');
                         const decrypted = decrypt.decrypt(ciphertext);
                         if (!decrypted && decrypted !== '') {
-                            return { error: '解密失败：私钥错误或密文格式不匹配' };
+                            return { error: '解密失败：可能是私钥错误或密文格式不匹配' };
                         }
                         return { output: decrypted };
                     }
@@ -80,13 +169,19 @@ const RSATools = {
                         const privateKey = crypt.getPrivateKey();
                         const publicKey = crypt.getPublicKey();
                         const result = [
+                            `=== RSA ${keySize} bit 密钥对 ===`,
+                            '',
+                            '公钥 (Public Key):',
                             publicKey,
                             '',
+                            '私钥 (Private Key):',
                             privateKey,
+                            '',
+                            '注意: 请妥善保管私钥，不要泄露！',
                         ];
                         return {
                             output: result.join('\n'),
-                            info: `已生成 ${keySize} bit 密钥对，请分别粘贴到公钥/私钥框中`
+                            info: `已生成 ${keySize} bit RSA 密钥对`
                         };
                     }
                     default:
