@@ -74,7 +74,7 @@
 ### 实用工具
 | 工具 | 说明 |
 |------|------|
-| JWT 解析 | 解码 Header/Payload/Signature，显示过期状态和算法信息 |
+| JWT 解析 | 解析/创建/验证 JWT Token，Claims 说明，安全警告（alg=none/过期/密钥注入等），HMAC + RSA 签名验证 |
 | 时间戳转换 | Unix 时间戳 ↔ 日期，支持秒/毫秒，多格式输出 |
 
 ### Padding 支持
