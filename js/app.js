@@ -582,7 +582,16 @@ function renderJwtDisplay(data) {
     if (data.verifyStatus) {
         verifyEl.classList.remove('hidden', 'valid', 'invalid');
         verifyEl.classList.add(data.verifyStatus.valid ? 'valid' : 'invalid');
-        verifyEl.textContent = data.verifyStatus.valid ? '✓ Signature Verified' : '✗ Invalid Signature';
+        let verifyHtml = data.verifyStatus.valid ? '✓ Signature Verified' : '✗ Invalid Signature';
+        if (data.verifyStatus.error) {
+            verifyHtml = `⚠ ${escapeHtml(data.verifyStatus.error)}`;
+        } else if (data.verifyStatus.expected) {
+            verifyHtml += `\nComputed: ${escapeHtml(data.verifyStatus.expected)}`;
+            if (!data.verifyStatus.valid && data.signature) {
+                verifyHtml += `\nExpected: ${escapeHtml(data.signature)}`;
+            }
+        }
+        verifyEl.innerHTML = verifyHtml.replace(/\n/g, '<br>');
     } else {
         verifyEl.classList.add('hidden');
     }

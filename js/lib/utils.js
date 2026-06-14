@@ -309,7 +309,7 @@ const UtilsTools = {
                         verifyResult = { error: `不支持 ${alg} 验证` };
                     }
                     if (!verifyResult.error) {
-                        jwtData.verifyStatus = { valid: verifyResult.valid };
+                        jwtData.verifyStatus = { valid: verifyResult.valid, expected: verifyResult.expected };
                         messages.push(verifyResult.valid ? '签名验证通过' : '签名验证失败');
                     } else {
                         jwtData.verifyStatus = { valid: false, error: verifyResult.error };
