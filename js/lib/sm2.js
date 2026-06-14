@@ -14,10 +14,10 @@ const SM2Tools = {
             {
                 id: 'operation', label: '操作', type: 'select',
                 values: [
-                    { value: 'encrypt', label: '加密 (公钥)' },
-                    { value: 'decrypt', label: '解密 (私钥)' },
-                    { value: 'sign', label: '签名 (私钥)' },
-                    { value: 'verify', label: '验签 (公钥)' },
+                    { value: 'encrypt', label: '加密 (用公钥)' },
+                    { value: 'decrypt', label: '解密 (用私钥)' },
+                    { value: 'sign', label: '签名 (用私钥)' },
+                    { value: 'verify', label: '验签 (用公钥)' },
                     { value: 'genkey', label: '生成密钥对' },
                 ],
                 default: 'encrypt'
@@ -31,8 +31,13 @@ const SM2Tools = {
                 default: '1'
             },
             {
-                id: 'key', label: '公钥/私钥', type: 'text',
-                placeholder: '加密/验签填公钥，解密/签名填私钥',
+                id: 'publicKey', label: '公钥 (Hex，加密/验签)', type: 'text',
+                placeholder: '04 开头的 Hex 公钥 (130字符)',
+                default: ''
+            },
+            {
+                id: 'privateKey', label: '私钥 (Hex，解密/签名)', type: 'text',
+                placeholder: '64字符 Hex 私钥',
                 default: ''
             },
             {
@@ -52,61 +57,41 @@ const SM2Tools = {
             try {
                 switch (operation) {
                     case 'encrypt': {
-                        if (!opts.key) return { error: '请输入公钥 (Hex)' };
-                        let publicKey = opts.key.trim();
-                        // 确保公钥有 04 前缀
-                        if (publicKey.length === 128) publicKey = '04' + publicKey;
-                        const encrypted = sm2.doEncrypt(input, publicKey, cipherMode);
+                        let pubKey = (opts.publicKey || '').trim();
+                        if (!pubKey) return { error: '请输入公钥（公钥框）' };
+                        if (pubKey.length === 128) pubKey = '04' + pubKey;
+                        const encrypted = sm2.doEncrypt(input, pubKey, cipherMode);
                         return { output: encrypted };
                     }
                     case 'decrypt': {
-                        if (!opts.key) return { error: '请输入私钥 (Hex)' };
-                        const privateKey = opts.key.trim();
-                        // 清理密文
+                        const priKey = (opts.privateKey || '').trim();
+                        if (!priKey) return { error: '请输入私钥（私钥框）' };
                         let ciphertext = input.trim().replace(/\s/g, '');
-                        // 去除可能的 04 前缀
-                        if (ciphertext.startsWith('04')) {
-                            ciphertext = ciphertext.substring(2);
-                        }
-                        const decrypted = sm2.doDecrypt(ciphertext, privateKey, cipherMode);
-                        if (!decrypted) {
-                            return { error: '解密失败：可能是私钥错误或密文格式不匹配' };
-                        }
+                        if (ciphertext.startsWith('04')) ciphertext = ciphertext.substring(2);
+                        const decrypted = sm2.doDecrypt(ciphertext, priKey, cipherMode);
+                        if (!decrypted) return { error: '解密失败：私钥错误或密文格式不匹配' };
                         return { output: decrypted };
                     }
                     case 'sign': {
-                        if (!opts.key) return { error: '请输入私钥 (Hex)' };
-                        const privateKey = opts.key.trim();
-                        const signature = sm2.doSignature(input, privateKey, {
-                            hash: true,
-                        });
+                        const priKey = (opts.privateKey || '').trim();
+                        if (!priKey) return { error: '请输入私钥（私钥框）' };
+                        const signature = sm2.doSignature(input, priKey, { hash: true });
                         return { output: signature };
                     }
                     case 'verify': {
-                        if (!opts.key) return { error: '请输入公钥 (Hex)' };
-                        if (!opts.signature) return { error: '请输入签名值 (Hex)' };
-                        let publicKey = opts.key.trim();
-                        if (publicKey.length === 128) publicKey = '04' + publicKey;
-                        const sig = opts.signature.trim();
-                        const valid = sm2.doVerifySignature(input, sig, publicKey, {
-                            hash: true,
-                        });
+                        let pubKey = (opts.publicKey || '').trim();
+                        if (!pubKey) return { error: '请输入公钥（公钥框）' };
+                        if (!opts.signature) return { error: '请输入签名值' };
+                        if (pubKey.length === 128) pubKey = '04' + pubKey;
+                        const valid = sm2.doVerifySignature(input, opts.signature.trim(), pubKey, { hash: true });
                         return { output: valid ? '验签成功: 签名有效' : '验签失败: 签名无效' };
                     }
                     case 'genkey': {
                         const keypair = sm2.generateKeyPairHex();
-                        const result = [
-                            '=== SM2 密钥对 ===',
-                            '',
-                            '私钥 (Private Key):',
-                            keypair.privateKey,
-                            '',
-                            '公钥 (Public Key):',
-                            keypair.publicKey,
-                            '',
-                            '注意: 请妥善保管私钥，不要泄露！',
-                        ];
-                        return { output: result.join('\n') };
+                        return {
+                            output: keypair.publicKey + '\n' + keypair.privateKey,
+                            info: '已生成密钥对，第一行是公钥，第二行是私钥，请分别粘贴到对应框中'
+                        };
                     }
                     default:
                         return { error: '未知操作' };
@@ -116,12 +101,10 @@ const SM2Tools = {
             }
         },
         decode(input, opts = {}) {
-            // decode 就是解密操作
             opts.operation = 'decrypt';
             return this.encode(input, opts);
         }
     }
 };
 
-// Export
 window.SM2Tools = SM2Tools;

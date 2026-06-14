@@ -195,10 +195,10 @@ function renderToolOptions(tool) {
 
     if (tool.options && tool.options.length > 0) {
         // Separate key/IV options from other options
-        const keyIvOpts = tool.options.filter(o => o.id === 'key' || o.id === 'iv');
+        const keyIvOpts = tool.options.filter(o => o.id === 'key' || o.id === 'iv' || o.id === 'publicKey' || o.id === 'privateKey');
         const formatOpts = tool.options.filter(o => o.id === 'keyFormat' || o.id === 'ivFormat');
         const otherOpts = tool.options.filter(o => 
-            !['key', 'iv', 'keyFormat', 'ivFormat'].includes(o.id)
+            !['key', 'iv', 'keyFormat', 'ivFormat', 'publicKey', 'privateKey'].includes(o.id)
         );
 
         // Render other options in grid
@@ -297,7 +297,7 @@ function renderToolOptions(tool) {
     }
 
     // Bind key length hints
-    container.querySelectorAll('input[data-option="key"], input[data-option="iv"]').forEach(input => {
+    container.querySelectorAll('input[data-option="key"], input[data-option="iv"], textarea[data-option="publicKey"], textarea[data-option="privateKey"]').forEach(input => {
         input.addEventListener('input', updateKeyLengthHint);
     });
 }
