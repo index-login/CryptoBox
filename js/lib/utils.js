@@ -259,104 +259,61 @@ const UtilsTools = {
             }
 
             try {
-                const output = [];
-                const messages = [];
-
-                // --- 1. Header 解码 ---
                 const headerStr = this._base64UrlDecode(parts[0]);
                 if (!headerStr) return { error: 'JWT Header 解码失败：无效的 Base64URL 编码' };
                 let header;
                 try { header = JSON.parse(headerStr); }
                 catch { return { error: 'JWT Header 解码失败：不是有效的 JSON' }; }
 
-                output.push('--- Header ---');
-                output.push(JSON.stringify(header, null, 2));
-                for (const [key, value] of Object.entries(header)) {
-                    const desc = this._getHeaderFieldDesc(key);
-                    if (desc) {
-                        const val = typeof value === 'object' ? JSON.stringify(value) : String(value);
-                        output.push(`  ${key}: ${val}  ← ${desc}`);
-                    }
-                }
-
-                // --- 2. Payload 解码 ---
                 const payloadStr = this._base64UrlDecode(parts[1]);
                 if (!payloadStr) return { error: 'JWT Payload 解码失败：无效的 Base64URL 编码' };
                 let payload;
                 try { payload = JSON.parse(payloadStr); }
                 catch { return { error: 'JWT Payload 解码失败：不是有效的 JSON' }; }
 
-                output.push('');
-                output.push('--- Payload ---');
-                output.push(JSON.stringify(payload, null, 2));
-
-                // --- 3. Claims 时间线分析 ---
+                const alg = header.alg || 'unknown';
                 const now = Math.floor(Date.now() / 1000);
-                const timeLines = [];
+                const infoParts = [];
+                const messages = [];
 
-                if (payload.iat) {
-                    const ago = now - payload.iat;
-                    timeLines.push(`iat (签发): ${this._formatTimestamp(payload.iat)}  [${this._formatDuration(ago)}前]`);
-                }
-                if (payload.nbf) {
-                    if (now < payload.nbf) {
-                        timeLines.push(`nbf (生效): ${this._formatTimestamp(payload.nbf)}  [尚未生效]`);
+                // Header
+                const output = [JSON.stringify(header, null, 2), ''];
+
+                // Payload - 替换时间戳为可读格式
+                const payloadDisplay = {};
+                for (const [key, value] of Object.entries(payload)) {
+                    if (['iat', 'nbf', 'exp'].includes(key) && typeof value === 'number') {
+                        payloadDisplay[key] = `${value}  (${this._formatTimestamp(value)})`;
                     } else {
-                        timeLines.push(`nbf (生效): ${this._formatTimestamp(payload.nbf)}  [已生效]`);
+                        payloadDisplay[key] = value;
                     }
                 }
+                output.push(JSON.stringify(payloadDisplay, null, 2));
+
+                // 一行摘要
+                infoParts.push(this._getAlgorithmName(alg));
+
+                if (payload.iat) infoParts.push(`签发 ${this._formatTimestamp(payload.iat)}`);
+
                 if (payload.exp) {
                     const remaining = payload.exp - now;
                     if (remaining < 0) {
-                        timeLines.push(`exp (过期): ${this._formatTimestamp(payload.exp)}  [已过期 ${this._formatDuration(-remaining)}前]`);
+                        infoParts.push(`已过期 ${this._formatDuration(-remaining)}`);
                         messages.push('Token 已过期');
                     } else {
-                        timeLines.push(`exp (过期): ${this._formatTimestamp(payload.exp)}  [剩余 ${this._formatDuration(remaining)}]`);
-                    }
-                } else {
-                    timeLines.push('exp (过期): 未设置  [永不过期]');
-                }
-
-                if (timeLines.length > 0) {
-                    output.push('');
-                    output.push('--- 时间声明 ---');
-                    timeLines.forEach(l => output.push(l));
-                }
-
-                // 非时间 Claims 说明
-                const timeClaims = new Set(['iat', 'nbf', 'exp']);
-                const otherClaims = Object.entries(payload).filter(([k]) => !timeClaims.has(k));
-                if (otherClaims.length > 0) {
-                    output.push('');
-                    output.push('--- Claims 说明 ---');
-                    for (const [key, value] of otherClaims) {
-                        const desc = this._getClaimDesc(key);
-                        const val = typeof value === 'object' ? JSON.stringify(value) : String(value);
-                        output.push(`  ${key}: ${val}${desc ? '  ← ' + desc : ''}`);
+                        infoParts.push(`剩余 ${this._formatDuration(remaining)}`);
                     }
                 }
 
-                // --- 4. Signature ---
-                output.push('');
-                output.push('--- Signature ---');
                 if (parts[2]) {
-                    try {
-                        const sigBinary = atob(parts[2].replace(/-/g, '+').replace(/_/g, '/'));
-                        const sigHex = Array.from(sigBinary).map(ch => ch.charCodeAt(0).toString(16).padStart(2, '0')).join('');
-                        output.push(`Hex: ${sigHex}`);
-                        output.push(`Base64URL: ${parts[2]}`);
-                    } catch {
-                        output.push(parts[2]);
-                    }
-                } else {
-                    output.push('(无签名)');
+                    infoParts.push('有签名');
                 }
 
-                // --- 5. 签名验证 ---
-                const alg = header.alg || 'unknown';
+                output.push('');
+                output.push(infoParts.join(' | '));
+
+                // 签名验证
                 if (opts.secret && alg !== 'none') {
-                    output.push('');
-                    output.push('--- 签名验证 ---');
                     const secretFormat = opts.secretFormat || 'utf8';
                     const algType = this._getAlgorithmType(alg);
                     let verifyResult;
@@ -366,37 +323,28 @@ const UtilsTools = {
                         if (secretFormat === 'pem' || opts.secret.includes('-----BEGIN')) {
                             verifyResult = this._verifyRSA(parts[0], parts[1], parts[2] || '', opts.secret, alg);
                         } else {
-                            verifyResult = { error: 'RSA 算法需要 PEM 格式的公钥' };
+                            verifyResult = { error: 'RSA 需要 PEM 格式公钥' };
                         }
                     } else {
-                        verifyResult = { error: `暂不支持 ${alg} 签名验证，仅支持 HMAC 和 RSA 系列` };
+                        verifyResult = { error: `不支持 ${alg} 验证` };
                     }
                     if (verifyResult.error) {
                         output.push(verifyResult.error);
                     } else if (verifyResult.valid) {
-                        output.push('✓ 签名验证通过');
+                        output.push('Signature Verified');
                         messages.push('签名验证通过');
                     } else {
-                        output.push('✗ 签名验证失败！密钥不匹配或 Token 被篡改');
-                        if (verifyResult.expected) output.push(`期望签名: ${verifyResult.expected}`);
+                        output.push('Invalid Signature');
                         messages.push('签名验证失败');
                     }
                 }
 
-                // --- 6. 安全警告 ---
+                // 安全警告
                 const warnings = this._getSecurityWarnings(header, payload, parts);
-                if (warnings.length > 0) {
-                    output.push('');
-                    output.push('--- 安全警告 ---');
-                    for (const w of warnings) {
-                        const icon = w.level === 'CRITICAL' ? '[!!]' : w.level === 'WARN' ? '[!]' : '[i]';
-                        output.push(`${icon} ${w.msg}`);
-                    }
+                for (const w of warnings) {
+                    const icon = w.level === 'CRITICAL' ? '[!!]' : w.level === 'WARN' ? '[!]' : '[i]';
+                    output.push(`${icon} ${w.msg}`);
                 }
-
-                // --- 7. Token 摘要 ---
-                output.push('');
-                output.push(`算法: ${this._getAlgorithmName(alg)} | 长度: ${token.length} 字符 | 段数: ${parts.length}`);
 
                 return {
                     output: output.join('\n'),
