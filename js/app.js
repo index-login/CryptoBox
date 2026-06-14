@@ -31,6 +31,7 @@ if (typeof CipherTools !== 'undefined') registerTools(CipherTools);
 if (typeof ClassicalCiphers !== 'undefined') registerTools(ClassicalCiphers);
 if (typeof SM2Tools !== 'undefined') registerTools(SM2Tools);
 if (typeof RSATools !== 'undefined') registerTools(RSATools);
+if (typeof UtilsTools !== 'undefined') registerTools(UtilsTools);
 
 // ============================================================
 // State
@@ -244,6 +245,9 @@ function getActionLabel(tool, action) {
     }
     if (tool.category === 'encoding') {
         return action === 'encode' ? '编码' : '解码';
+    }
+    if (tool.category === 'utils') {
+        return action === 'encode' ? '解析/转换' : '反向转换';
     }
     return action === 'encode' ? '加密' : '解密';
 }

@@ -225,10 +225,12 @@ CryptoBox/
 │   │   └── batch.js        # 批量处理模式
 │   ├── lib/
 │   │   ├── encoding.js     # 编码/解码模块
-│   │   ├── cipher.js       # 加密/解密模块
+│   │   ├── cipher.js       # 对称加密/解密模块
+│   │   ├── classical.js    # 古典密码模块
 │   │   ├── hash.js         # 哈希计算模块
-│   │   ├── utils.js        # 实用工具模块
-│   │   └── file.js         # 文件工具模块
+│   │   ├── sm2.js          # SM2 国密非对称加密
+│   │   ├── rsa.js          # RSA 非对称加密
+│   │   └── utils.js        # 实用工具模块（JWT解析、时间戳转换）
 │   └── vendor/
 │       ├── crypto-js.min.js # CryptoJS 库
 │       └── sm-crypto.min.js # 国密 SM2/SM3/SM4 库
@@ -272,34 +274,34 @@ CryptoBox/
 
 ### Phase 1 - 基础框架 (MVP)
 - [x] 项目初始化
-- [ ] 页面框架搭建（导航、侧边栏、内容区）
-- [ ] 输入输出格式切换组件（UTF-8/Hex/Base64）
-- [ ] 智能输入预处理模块（URL解码、转义符处理、空白清理）
-- [ ] Base64 编解码
-- [ ] MD5 / SHA 哈希
-- [ ] URL 编解码
+- [x] 页面框架搭建（导航、侧边栏、内容区）
+- [x] 输入输出格式切换组件（UTF-8/Hex/Base64）
+- [x] 智能输入预处理模块（URL解码、转义符处理、空白清理）
+- [x] Base64 编解码
+- [x] MD5 / SHA 哈希
+- [x] URL 编解码
 
 ### Phase 2 - 核心加密工具
-- [ ] AES 加解密（完整 Padding + 密钥格式选择 + IV 校验）
-- [ ] DES 加解密
-- [ ] 3DES 加解密
-- [ ] SM4 加解密（国密对称）
-- [ ] SM2 加解密（国密非对称）
-- [ ] SM3 哈希（国密哈希）
-- [ ] RSA 加解密
-- [ ] Caesar / Vigenere 等古典密码
+- [x] AES 加解密（完整 Padding + 密钥格式选择 + IV 校验）
+- [x] DES 加解密
+- [x] 3DES 加解密
+- [x] SM4 加解密（国密对称，ECB/CBC/CTR/CFB/OFB 全模式 + Gzip 压缩）
+- [x] SM2 加解密（国密非对称，加解密/签名/验签/密钥对生成）
+- [x] SM3 哈希（国密哈希，支持 HMAC 模式）
+- [x] RSA 加解密（加解密/密钥对生成）
+- [x] Caesar / Vigenere 等古典密码
 
 ### Phase 3 - 实用工具
-- [ ] JWT 解析
-- [ ] 时间戳转换
+- [x] JWT 解析
+- [x] 时间戳转换（秒/毫秒，多格式输出）
 - [ ] 随机密码生成
-- [ ] 进制转换
-- [ ] 批量处理模式
+- [x] 进制转换
+- [x] 批量处理模式
 
 ### Phase 4 - 高级功能
-- [ ] 编码自动识别 (Magic 模式)
+- [x] 编码自动识别 (Magic 模式)
 - [ ] 流水线/链式处理 (Recipe)
-- [ ] 操作历史记录
+- [x] 操作历史记录
 - [ ] URL 分享功能
 - [ ] 文件哈希计算
 - [ ] Hex Dump
