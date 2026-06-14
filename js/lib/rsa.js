@@ -31,8 +31,8 @@ const RSATools = {
                 default: '2048'
             },
             {
-                id: 'key', label: '公钥/私钥 (PEM格式)', type: 'text',
-                placeholder: '粘贴 PEM 格式的公钥或私钥',
+                id: 'key', label: '公钥/私钥 (PEM格式)', type: 'textarea',
+                placeholder: '粘贴 PEM 格式密钥\n-----BEGIN PUBLIC KEY-----\nMIIBIjANBg...\n-----END PUBLIC KEY-----',
                 default: ''
             },
         ],

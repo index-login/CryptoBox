@@ -242,9 +242,15 @@ function renderToolOptions(tool) {
             }
             html += `<span class="key-length-hint" id="hint-${opt.id}"></span>`;
             html += `</div>`;
-            html += `<input type="text" id="opt-${opt.id}" data-option="${opt.id}" 
-                placeholder="${opt.placeholder || ''}" value="${opt.default || ''}"
-                class="w-full bg-dark-700 border border-dark-500 rounded-md px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-accent placeholder-gray-600">`;
+            if (opt.type === 'textarea') {
+                html += `<textarea id="opt-${opt.id}" data-option="${opt.id}" rows="3"
+                    placeholder="${opt.placeholder || ''}"
+                    class="w-full bg-dark-700 border border-dark-500 rounded-md px-3 py-1.5 text-sm font-mono resize-y focus:outline-none focus:border-accent placeholder-gray-600">${escapeHtml(opt.default || '')}</textarea>`;
+            } else {
+                html += `<input type="text" id="opt-${opt.id}" data-option="${opt.id}" 
+                    placeholder="${opt.placeholder || ''}" value="${opt.default || ''}"
+                    class="w-full bg-dark-700 border border-dark-500 rounded-md px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-accent placeholder-gray-600">`;
+            }
             html += `</div>`;
         });
     }
