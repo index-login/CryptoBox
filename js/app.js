@@ -140,15 +140,22 @@ function selectTool(toolId) {
     const isJwt = toolId === 'jwt';
     dom.outputText.classList.toggle('hidden', isJwt);
     dom.jwtDisplay.classList.toggle('hidden', !isJwt);
+    dom.btnSwap.classList.toggle('hidden', isJwt);
     if (isJwt) {
         dom.jwtDisplay.querySelectorAll('.jwt-panel-json').forEach(el => el.textContent = '');
         dom.jwtDisplay.querySelector('#jwt-verify-status').classList.add('hidden');
         dom.jwtDisplay.querySelector('#jwt-warnings').classList.add('hidden');
         dom.inputText.placeholder = '粘贴完整 JWT Token\neyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIi...';
         dom.inputText.rows = 4;
+        // Default to parse mode: show single input
+        dom.inputArea.classList.remove('hidden');
+        dom.jwtInputArea.classList.add('hidden');
     } else {
         dom.inputText.placeholder = '在此输入内容...';
         dom.inputText.rows = 6;
+        dom.inputArea.classList.remove('hidden');
+        dom.jwtInputArea.classList.add('hidden');
+        dom.btnSwap.classList.remove('hidden');
     }
 
     // Close mobile sidebar
@@ -250,8 +257,13 @@ function renderToolOptions(tool) {
             currentAction = e.target.value;
             if (currentTool && currentTool.id === 'jwt') {
                 if (currentAction === 'decode') {
-                    dom.inputText.placeholder = '输入 JSON 格式的 Payload\n{"sub":"1234567890","name":"John Doe","iat":1700000000}';
+                    // Create mode: dual input
+                    dom.inputArea.classList.add('hidden');
+                    dom.jwtInputArea.classList.remove('hidden');
                 } else {
+                    // Parse mode: single input
+                    dom.inputArea.classList.remove('hidden');
+                    dom.jwtInputArea.classList.add('hidden');
                     dom.inputText.placeholder = '粘贴完整 JWT Token\neyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIi...';
                 }
             }
@@ -262,13 +274,13 @@ function renderToolOptions(tool) {
     const jwtExampleBtn = container.querySelector('#jwt-fill-example');
     if (jwtExampleBtn) {
         jwtExampleBtn.addEventListener('click', () => {
+            const secretInput = container.querySelector('[data-option="secret"]');
             if (currentAction === 'decode') {
-                dom.inputText.value = '{\n  "sub": "1234567890",\n  "name": "John Doe",\n  "admin": true,\n  "iat": 1516239022\n}';
-                const secretInput = container.querySelector('[data-option="secret"]');
+                dom.jwtHeaderInput.value = '{\n  "alg": "HS256",\n  "typ": "JWT"\n}';
+                dom.jwtPayloadInput.value = '{\n  "sub": "1234567890",\n  "name": "John Doe",\n  "admin": true,\n  "iat": 1516239022\n}';
                 if (secretInput) secretInput.value = 'your-256-bit-secret';
             } else {
                 dom.inputText.value = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.KMUFsIDTnFbyG3Ar4TANTwF1C9Khb_qSahLuKKPWHCE';
-                const secretInput = container.querySelector('[data-option="secret"]');
                 if (secretInput) secretInput.value = 'your-256-bit-secret';
             }
         });
@@ -324,8 +336,13 @@ function execute() {
 
     let input = dom.inputText.value;
 
+    // JWT create mode: read from dual input
+    if (currentTool.id === 'jwt' && currentAction === 'decode') {
+        input = dom.jwtPayloadInput.value;
+    }
+
     // Auto preprocess
-    if (dom.autoPreprocess.checked) {
+    if (dom.autoPreprocess.checked && !(currentTool.id === 'jwt' && currentAction === 'decode')) {
         input = Preprocessor.process(input);
     }
 
@@ -334,6 +351,11 @@ function execute() {
     dom.toolOptions.querySelectorAll('[data-option]').forEach(el => {
         opts[el.dataset.option] = el.value;
     });
+
+    // JWT create mode: pass header from dual input
+    if (currentTool.id === 'jwt' && currentAction === 'decode') {
+        opts._jwtHeader = dom.jwtHeaderInput.value.trim();
+    }
 
     // Batch mode
     if (dom.batchMode.checked) {
@@ -449,6 +471,8 @@ function bindEvents() {
         dom.inputText.value = '';
         dom.outputText.value = '';
         hideMessage();
+        if (dom.jwtHeaderInput) dom.jwtHeaderInput.value = '';
+        if (dom.jwtPayloadInput) dom.jwtPayloadInput.value = '';
         if (dom.jwtDisplay) {
             dom.jwtDisplay.querySelectorAll('.jwt-panel-json').forEach(el => el.textContent = '');
             const vs = dom.jwtDisplay.querySelector('#jwt-verify-status');
@@ -490,6 +514,8 @@ function bindEvents() {
             dom.inputText.value = '';
             dom.outputText.value = '';
             hideMessage();
+            if (dom.jwtHeaderInput) dom.jwtHeaderInput.value = '';
+            if (dom.jwtPayloadInput) dom.jwtPayloadInput.value = '';
             if (dom.jwtDisplay) {
                 dom.jwtDisplay.querySelectorAll('.jwt-panel-json').forEach(el => el.textContent = '');
                 const vs = dom.jwtDisplay.querySelector('#jwt-verify-status');
@@ -677,6 +703,10 @@ function init() {
         historyToggle: $('#history-toggle'),
         btnClearHistory: $('#btn-clear-history'),
         jwtDisplay: $('#jwt-display'),
+        inputArea: $('#input-area'),
+        jwtInputArea: $('#jwt-input-area'),
+        jwtHeaderInput: $('#jwt-header-input'),
+        jwtPayloadInput: $('#jwt-payload-input'),
     };
 
     renderSidebar();

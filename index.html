@@ -191,7 +191,7 @@
                 </div>
 
                 <!-- Input area -->
-                <div class="mb-4">
+                <div id="input-area" class="mb-4">
                     <div class="flex items-center justify-between mb-1.5">
                         <label class="text-sm text-gray-400">输入</label>
                         <div class="flex items-center gap-2">
@@ -207,6 +207,34 @@
                     <textarea id="input-text" rows="6" placeholder="在此输入内容..."
                         class="w-full bg-dark-700 border border-dark-500 rounded-lg px-4 py-3 text-sm font-mono resize-y focus:outline-none focus:border-accent placeholder-gray-600"
                         spellcheck="false"></textarea>
+                </div>
+
+                <!-- JWT create mode: dual input (Header + Payload) -->
+                <div id="jwt-input-area" class="mb-4 hidden">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                            <div class="flex items-center justify-between mb-1.5">
+                                <label class="text-sm font-semibold" style="color:#c084fc">HEADER</label>
+                                <span class="text-xs text-gray-500">JSON</span>
+                            </div>
+                            <textarea id="jwt-header-input" rows="5"
+                                class="w-full text-sm font-mono resize-y focus:outline-none placeholder-gray-600"
+                                style="background:#2d1f4e;border:1px solid #5b3a8c;border-radius:0.5rem;padding:0.75rem"
+                                placeholder='{"alg":"HS256","typ":"JWT"}'
+                                spellcheck="false"></textarea>
+                        </div>
+                        <div>
+                            <div class="flex items-center justify-between mb-1.5">
+                                <label class="text-sm font-semibold" style="color:#fb7185">PAYLOAD</label>
+                                <span class="text-xs text-gray-500">JSON</span>
+                            </div>
+                            <textarea id="jwt-payload-input" rows="5"
+                                class="w-full text-sm font-mono resize-y focus:outline-none placeholder-gray-600"
+                                style="background:#3b1f2a;border:1px solid #8c3a5b;border-radius:0.5rem;padding:0.75rem"
+                                placeholder='{"sub":"1234567890","name":"John Doe"}'
+                                spellcheck="false"></textarea>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Tool-specific options (dynamically rendered) -->

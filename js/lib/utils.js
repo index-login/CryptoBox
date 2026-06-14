@@ -352,11 +352,20 @@ const UtilsTools = {
             if (!secret) return { error: '创建 JWT 需要输入密钥（在选项中填写）' };
 
             try {
+                // Parse header: from dual input or auto-generate
+                let header;
+                if (opts._jwtHeader) {
+                    try { header = JSON.parse(opts._jwtHeader); }
+                    catch { return { error: 'Header 不是有效的 JSON' }; }
+                } else {
+                    header = { alg: algorithm, typ: 'JWT' };
+                }
+
+                // Parse payload
                 let payload;
                 try { payload = JSON.parse(input.trim()); }
-                catch { return { error: '输入不是有效的 JSON，请输入 JSON 格式的 Payload\n示例: {"sub": "1234", "name": "Test", "iat": 1700000000}' }; }
+                catch { return { error: 'Payload 不是有效的 JSON\n示例: {"sub": "1234", "name": "Test"}' }; }
 
-                const header = { alg: algorithm, typ: 'JWT' };
                 const headerB64 = this._base64UrlEncode(JSON.stringify(header));
                 const payloadB64 = this._base64UrlEncode(JSON.stringify(payload));
                 const message = headerB64 + '.' + payloadB64;
