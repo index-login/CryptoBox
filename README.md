@@ -141,6 +141,7 @@ open http://localhost:8080
 - [ ] URL 分享功能
 - [ ] UUID 生成 / 随机密码生成
 - [ ] 离线支持 (PWA)
+- [x] 二维码生成
 
 ## License
 
