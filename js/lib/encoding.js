@@ -500,6 +500,207 @@ const EncodingTools = {
                 toBase: opts.fromBase
             });
         }
+    },
+
+    // --- QR Code Generator ---
+    qrcode: {
+        id: 'qrcode',
+        name: '二维码生成',
+        category: 'utils',
+        description: '文本/URL 生成 QR Code 图片，支持自定义尺寸/颜色/中心 Logo',
+        autoDetectable: false,
+        options: [
+            {
+                id: 'ecLevel', label: '纠错等级', type: 'select',
+                values: [
+                    { value: 'L', label: 'L - 低 (7%)' },
+                    { value: 'M', label: 'M - 中 (15%)' },
+                    { value: 'Q', label: 'Q - 较高 (25%)' },
+                    { value: 'H', label: 'H - 高 (30%)' },
+                ],
+                default: 'M'
+            },
+            {
+                id: 'size', label: '尺寸 (px)', type: 'number',
+                default: '512', min: '64', max: '4096'
+            },
+            {
+                id: 'margin', label: '边距模块数', type: 'number',
+                default: '4', min: '0', max: '8'
+            },
+            {
+                id: 'outputType', label: '输出格式', type: 'select',
+                values: [
+                    { value: 'png', label: 'PNG 图片' },
+                    { value: 'svg', label: 'SVG 矢量' },
+                ],
+                default: 'png'
+            },
+            {
+                id: 'fgColor', label: '前景色', type: 'text',
+                placeholder: '#000000', default: '#000000'
+            },
+            {
+                id: 'bgColor', label: '背景色', type: 'text',
+                placeholder: '#ffffff', default: '#ffffff'
+            },
+            {
+                id: 'logoSize', label: 'Logo 占比 (%)', type: 'number',
+                default: '20', min: '5', max: '40'
+            }
+        ],
+
+        _generateQr(input, opts) {
+            const ecLevel = opts.ecLevel || 'M';
+            const targetSize = parseInt(opts.size || '512');
+            const margin = parseInt(opts.margin || '4');
+            const fgColor = opts.fgColor || '#000000';
+            const bgColor = opts.bgColor || '#ffffff';
+            const logoSizePercent = parseInt(opts.logoSize || '20') / 100;
+
+            const qr = qrcode(0, ecLevel);
+            qr.addData(input);
+            qr.make();
+
+            const moduleCount = qr.getModuleCount();
+            const totalModules = moduleCount + margin * 2;
+            const moduleSize = Math.max(1, Math.floor(targetSize / totalModules));
+            const canvasSize = totalModules * moduleSize;
+
+            return { qr, moduleCount, totalModules, moduleSize, canvasSize, fgColor, bgColor, logoSizePercent, ecLevel, margin };
+        },
+
+        _drawQrCanvas(qr, moduleCount, margin, moduleSize, canvasSize, fgColor, bgColor) {
+            const canvas = document.createElement('canvas');
+            canvas.width = canvasSize;
+            canvas.height = canvasSize;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = bgColor;
+            ctx.fillRect(0, 0, canvasSize, canvasSize);
+
+            ctx.fillStyle = fgColor;
+            for (let row = 0; row < moduleCount; row++) {
+                for (let col = 0; col < moduleCount; col++) {
+                    if (qr.isDark(row, col)) {
+                        ctx.fillRect(
+                            (col + margin) * moduleSize,
+                            (row + margin) * moduleSize,
+                            moduleSize,
+                            moduleSize
+                        );
+                    }
+                }
+            }
+            return canvas;
+        },
+
+        _drawLogo(canvas, logoDataUrl, logoSizePercent) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    const ctx = canvas.getContext('2d');
+                    const logoW = canvas.width * logoSizePercent;
+                    const logoH = logoW * (img.height / img.width);
+                    const x = (canvas.width - logoW) / 2;
+                    const y = (canvas.height - logoH) / 2;
+
+                    const pad = logoW * 0.08;
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath();
+                    const rx = x - pad, ry = y - pad, rw = logoW + pad * 2, rh = logoH + pad * 2, rr = pad * 1.5;
+                    ctx.moveTo(rx + rr, ry);
+                    ctx.lineTo(rx + rw - rr, ry);
+                    ctx.quadraticCurveTo(rx + rw, ry, rx + rw, ry + rr);
+                    ctx.lineTo(rx + rw, ry + rh - rr);
+                    ctx.quadraticCurveTo(rx + rw, ry + rh, rx + rw - rr, ry + rh);
+                    ctx.lineTo(rx + rr, ry + rh);
+                    ctx.quadraticCurveTo(rx, ry + rh, rx, ry + rh - rr);
+                    ctx.lineTo(rx, ry + rr);
+                    ctx.quadraticCurveTo(rx, ry, rx + rr, ry);
+                    ctx.closePath();
+                    ctx.fill();
+
+                    ctx.drawImage(img, x, y, logoW, logoH);
+                    resolve();
+                };
+                img.onerror = () => resolve();
+                img.src = logoDataUrl;
+            });
+        },
+
+        encode(input, opts = {}) {
+            if (typeof qrcode === 'undefined') {
+                return { error: 'QR Code 库未加载，请检查网络连接' };
+            }
+            if (!input || !input.trim()) {
+                return { error: '请输入要编码的文本或 URL' };
+            }
+
+            try {
+                const params = this._generateQr(input, opts);
+                const { qr, moduleCount, totalModules, moduleSize, canvasSize, fgColor, bgColor, logoSizePercent, ecLevel } = params;
+                const outputType = opts.outputType || 'png';
+
+                const logoDataUrl = opts._logoDataUrl || null;
+
+                if (outputType === 'svg') {
+                    const size = totalModules * moduleSize;
+                    let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">`;
+                    svg += `<rect width="${size}" height="${size}" fill="${bgColor}"/>`;
+                    for (let row = 0; row < moduleCount; row++) {
+                        for (let col = 0; col < moduleCount; col++) {
+                            if (qr.isDark(row, col)) {
+                                svg += `<rect x="${(col + params.margin) * moduleSize}" y="${(row + params.margin) * moduleSize}" width="${moduleSize}" height="${moduleSize}" fill="${fgColor}"/>`;
+                            }
+                        }
+                    }
+                    if (logoDataUrl) {
+                        const logoW = size * logoSizePercent;
+                        const logoH = logoW;
+                        const lx = (size - logoW) / 2;
+                        const ly = (size - logoH) / 2;
+                        const pad = logoW * 0.08;
+                        svg += `<rect x="${lx - pad}" y="${ly - pad}" width="${logoW + pad * 2}" height="${logoH + pad * 2}" rx="${pad * 1.5}" fill="#ffffff"/>`;
+                        svg += `<image href="${logoDataUrl}" x="${lx}" y="${ly}" width="${logoW}" height="${logoH}"/>`;
+                    }
+                    svg += '</svg>';
+
+                    return {
+                        output: svg,
+                        qrData: {
+                            svg, moduleCount, totalModules, ecLevel, fgColor, bgColor,
+                            moduleSize, margin: params.margin, logoDataUrl, canvasSize
+                        },
+                        info: `${moduleCount}×${moduleCount} 模块 · ${canvasSize}×${canvasSize} px · 纠错 ${ecLevel} · SVG`
+                    };
+                }
+
+                const canvas = this._drawQrCanvas(qr, moduleCount, params.margin, moduleSize, canvasSize, fgColor, bgColor);
+
+                const finalize = (c) => {
+                    const dataUrl = c.toDataURL('image/png');
+                    return {
+                        output: dataUrl,
+                        qrData: {
+                            dataUrl, moduleCount, totalModules, ecLevel, fgColor, bgColor,
+                            moduleSize, margin: params.margin, logoDataUrl, canvasSize, canvas: c
+                        },
+                        info: `${moduleCount}×${moduleCount} 模块 · ${canvasSize}×${canvasSize} px · 纠错 ${ecLevel} · PNG`
+                    };
+                };
+
+                if (logoDataUrl) {
+                    return this._drawLogo(canvas, logoDataUrl, logoSizePercent).then(() => finalize(canvas));
+                }
+                return finalize(canvas);
+            } catch (e) {
+                return { error: `二维码生成失败: ${e.message}` };
+            }
+        },
+        decode() {
+            return { error: '暂不支持二维码解码，请使用手机扫码或在线二维码识别工具' };
+        }
     }
 };
 

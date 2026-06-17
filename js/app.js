@@ -138,9 +138,11 @@ function selectTool(toolId) {
 
     // Toggle JWT rich display vs textarea
     const isJwt = toolId === 'jwt';
-    dom.outputText.classList.toggle('hidden', isJwt);
+    const isQr = toolId === 'qrcode';
+    dom.outputText.classList.toggle('hidden', isJwt || isQr);
     dom.jwtDisplay.classList.toggle('hidden', !isJwt);
-    dom.btnSwap.classList.toggle('hidden', isJwt);
+    dom.qrDisplay.classList.toggle('hidden', !isQr);
+    dom.btnSwap.classList.toggle('hidden', isJwt || isQr);
     if (isJwt) {
         dom.jwtDisplay.querySelectorAll('.jwt-panel-json').forEach(el => el.textContent = '');
         dom.jwtDisplay.querySelector('#jwt-verify-status').classList.add('hidden');
@@ -150,6 +152,11 @@ function selectTool(toolId) {
         // Default to parse mode: show single input
         dom.inputArea.classList.remove('hidden');
         dom.jwtInputArea.classList.add('hidden');
+    } else if (isQr) {
+        dom.qrImage.innerHTML = '';
+        dom.qrInfo.textContent = '';
+        dom.inputText.placeholder = '输入要编码为二维码的文本或 URL...';
+        dom.inputText.rows = 4;
     } else {
         dom.inputText.placeholder = '在此输入内容...';
         dom.inputText.rows = 6;
@@ -280,6 +287,72 @@ function renderToolOptions(tool) {
         });
     });
 
+    // QR Code: logo upload + live preview setup
+    if (currentTool && currentTool.id === 'qrcode') {
+        const logoHtml = `
+            <div class="qr-logo-section mt-3 pt-3 border-t border-dark-500">
+                <div class="flex items-center gap-3">
+                    <label class="text-xs text-gray-400">中心 Logo</label>
+                    <input type="file" id="qr-logo-file" accept="image/*" class="hidden">
+                    <button id="qr-logo-btn" class="qr-action-btn">选择图片</button>
+                    <button id="qr-logo-clear" class="qr-action-btn hidden">移除</button>
+                    <span id="qr-logo-name" class="text-xs text-gray-500 truncate max-w-[200px]"></span>
+                </div>
+                <div id="qr-logo-preview" class="hidden mt-2">
+                    <img id="qr-logo-thumb" class="qr-logo-thumb" alt="Logo preview">
+                </div>
+            </div>
+        `;
+        dom.toolOptions.insertAdjacentHTML('beforeend', logoHtml);
+
+        const logoFile = document.getElementById('qr-logo-file');
+        const logoBtn = document.getElementById('qr-logo-btn');
+        const logoClear = document.getElementById('qr-logo-clear');
+        const logoName = document.getElementById('qr-logo-name');
+        const logoPreview = document.getElementById('qr-logo-preview');
+        const logoThumb = document.getElementById('qr-logo-thumb');
+
+        logoBtn.addEventListener('click', () => logoFile.click());
+        logoFile.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                dom.qrDisplay._logoDataUrl = ev.target.result;
+                logoThumb.src = ev.target.result;
+                logoPreview.classList.remove('hidden');
+                logoClear.classList.remove('hidden');
+                logoName.textContent = file.name;
+                updateQrPreview();
+            };
+            reader.readAsDataURL(file);
+        });
+        logoClear.addEventListener('click', () => {
+            dom.qrDisplay._logoDataUrl = null;
+            logoFile.value = '';
+            logoPreview.classList.add('hidden');
+            logoClear.classList.add('hidden');
+            logoName.textContent = '';
+            updateQrPreview();
+        });
+
+        if (dom.qrDisplay._logoDataUrl) {
+            logoThumb.src = dom.qrDisplay._logoDataUrl;
+            logoPreview.classList.remove('hidden');
+            logoClear.classList.remove('hidden');
+        }
+
+        let _qrPreviewTimer = null;
+        const schedulePreview = () => {
+            clearTimeout(_qrPreviewTimer);
+            _qrPreviewTimer = setTimeout(updateQrPreview, 200);
+        };
+        container.querySelectorAll('[data-option]').forEach(el => {
+            el.addEventListener('input', schedulePreview);
+            el.addEventListener('change', schedulePreview);
+        });
+    }
+
     // Bind JWT example button
     const jwtExampleBtn = container.querySelector('#jwt-fill-example');
     if (jwtExampleBtn) {
@@ -368,6 +441,9 @@ function getActionLabel(tool, action) {
         if (tool.id === 'jwt') {
             return action === 'encode' ? '解析 JWT' : '创建 JWT';
         }
+        if (tool.id === 'qrcode') {
+            return action === 'encode' ? '生成二维码' : '(仅生成)';
+        }
         return action === 'encode' ? '解析/转换' : '反向转换';
     }
     return action === 'encode' ? '加密' : '解密';
@@ -422,6 +498,11 @@ function execute() {
         opts._jwtHeader = dom.jwtHeaderInput.value.trim();
     }
 
+    // QR: pass logo data
+    if (currentTool.id === 'qrcode' && dom.qrDisplay._logoDataUrl) {
+        opts._logoDataUrl = dom.qrDisplay._logoDataUrl;
+    }
+
     // Batch mode
     if (dom.batchMode.checked) {
         executeBatch(input, opts);
@@ -443,6 +524,15 @@ function execute() {
 
     const result = fn.call(currentTool, input, opts);
 
+    // Handle async results (e.g. QR with logo)
+    if (result && typeof result.then === 'function') {
+        result.then(r => handleResult(r, input, opts, action));
+    } else {
+        handleResult(result, input, opts, action);
+    }
+}
+
+function handleResult(result, input, opts, action) {
     if (result.error) {
         dom.outputText.value = '';
         showMessage(result.error, 'error');
@@ -460,6 +550,13 @@ function execute() {
                 dom.outputText.classList.remove('hidden');
                 dom.jwtDisplay.classList.add('hidden');
             }
+        }
+
+        // QR: toggle rich display
+        if (currentTool.id === 'qrcode' && result.qrData) {
+            dom.outputText.classList.add('hidden');
+            dom.qrDisplay.classList.remove('hidden');
+            renderQrDisplay(result.qrData, result.info);
         }
 
         // Save to history on success
@@ -555,11 +652,25 @@ function bindEvents() {
             const ws = dom.jwtDisplay.querySelector('#jwt-warnings');
             if (ws) ws.classList.add('hidden');
         }
+        if (dom.qrDisplay) {
+            dom.qrImage.innerHTML = '';
+            dom.qrInfo.textContent = '';
+            dom.qrDisplay._qrData = null;
+        }
     });
 
     // Clear input
     dom.btnClearInput.addEventListener('click', () => {
         dom.inputText.value = '';
+    });
+
+    // QR live preview on input change
+    let _qrInputTimer = null;
+    dom.inputText.addEventListener('input', () => {
+        clearTimeout(_qrInputTimer);
+        if (currentTool && currentTool.id === 'qrcode') {
+            _qrInputTimer = setTimeout(updateQrPreview, 200);
+        }
     });
 
     // Copy output
@@ -597,6 +708,11 @@ function bindEvents() {
                 if (vs) vs.classList.add('hidden');
                 const ws = dom.jwtDisplay.querySelector('#jwt-warnings');
                 if (ws) ws.classList.add('hidden');
+            }
+            if (dom.qrDisplay) {
+                dom.qrImage.innerHTML = '';
+                dom.qrInfo.textContent = '';
+                dom.qrDisplay._qrData = null;
             }
         }
         // Ctrl+K: Focus search
@@ -650,6 +766,45 @@ function bindEvents() {
         if (hash && tools[hash]) {
             selectTool(hash);
         }
+    });
+
+    // QR Code action buttons
+    dom.qrDownloadPng.addEventListener('click', () => {
+        const qrData = dom.qrDisplay._qrData;
+        if (!qrData || !qrData.dataUrl) return;
+        const a = document.createElement('a');
+        a.href = qrData.dataUrl;
+        a.download = 'qrcode.png';
+        a.click();
+        showToast('PNG 已下载');
+    });
+
+    dom.qrDownloadSvg.addEventListener('click', () => {
+        const qrData = dom.qrDisplay._qrData;
+        if (!qrData || !qrData.svg) {
+            showToast('请先选择 SVG 输出格式并生成二维码');
+            return;
+        }
+        const blob = new Blob([qrData.svg], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'qrcode.svg';
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('SVG 已下载');
+    });
+
+    dom.qrCopyDataurl.addEventListener('click', () => {
+        const qrData = dom.qrDisplay._qrData;
+        if (!qrData) return;
+        const text = qrData.dataUrl || qrData.svg || '';
+        if (!text) return;
+        navigator.clipboard.writeText(text).then(() => {
+            showToast('已复制到剪贴板');
+        }).catch(() => {
+            showToast('复制失败');
+        });
     });
 }
 
@@ -746,6 +901,71 @@ function renderJwtDisplay(data) {
 }
 
 // ============================================================
+// QR Code Display
+// ============================================================
+
+function updateQrPreview() {
+    if (!currentTool || currentTool.id !== 'qrcode') return;
+    const input = dom.inputText.value;
+    if (!input.trim()) {
+        dom.qrImage.innerHTML = '';
+        dom.qrInfo.textContent = '';
+        dom.qrDisplay._qrData = null;
+        return;
+    }
+
+    const opts = {};
+    dom.toolOptions.querySelectorAll('[data-option]').forEach(el => {
+        opts[el.dataset.option] = el.value;
+    });
+    if (dom.qrDisplay._logoDataUrl) {
+        opts._logoDataUrl = dom.qrDisplay._logoDataUrl;
+    }
+
+    const result = currentTool.encode(input, opts);
+
+    const render = (r) => {
+        if (r.error) {
+            dom.qrImage.innerHTML = `<div class="qr-placeholder">${r.error}</div>`;
+            dom.qrInfo.textContent = '';
+            dom.qrDisplay._qrData = null;
+        } else if (r.qrData) {
+            dom.outputText.classList.add('hidden');
+            dom.qrDisplay.classList.remove('hidden');
+            renderQrDisplay(r.qrData, r.info);
+        }
+    };
+
+    if (result && typeof result.then === 'function') {
+        result.then(render);
+    } else {
+        render(result);
+    }
+}
+
+function renderQrDisplay(qrData, info) {
+    // Render image
+    if (qrData.dataUrl) {
+        dom.qrImage.innerHTML = `<img src="${qrData.dataUrl}" alt="QR Code">`;
+    } else if (qrData.svg) {
+        dom.qrImage.innerHTML = qrData.svg;
+    }
+
+    // Render info
+    const infoParts = [];
+    if (info) infoParts.push(info);
+    if (qrData.moduleCount) infoParts.push(`${qrData.moduleCount}×${qrData.moduleCount} 模块`);
+    if (qrData.totalModules && qrData.moduleSize) {
+        const px = qrData.totalModules * qrData.moduleSize;
+        infoParts.push(`${px}×${px} px`);
+    }
+    dom.qrInfo.textContent = infoParts.join(' · ');
+
+    // Store qrData for download/copy actions
+    dom.qrDisplay._qrData = qrData;
+}
+
+// ============================================================
 // Initialization
 // ============================================================
 
@@ -782,6 +1002,12 @@ function init() {
         jwtInputArea: $('#jwt-input-area'),
         jwtHeaderInput: $('#jwt-header-input'),
         jwtPayloadInput: $('#jwt-payload-input'),
+        qrDisplay: $('#qr-display'),
+        qrImage: $('#qr-image'),
+        qrInfo: $('#qr-info'),
+        qrDownloadPng: $('#qr-download-png'),
+        qrDownloadSvg: $('#qr-download-svg'),
+        qrCopyDataurl: $('#qr-copy-dataurl'),
     };
 
     renderSidebar();

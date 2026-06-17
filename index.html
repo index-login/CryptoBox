@@ -81,6 +81,14 @@
     </script>
     <!-- CryptoJS -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+    <!-- CryptoJS 扩展模块 (标准构建不包含) -->
+    <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/x64-core.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/sha3.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/ripemd160.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/md4.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/enc-utf16.js"></script>
+    <!-- QR Code Generator -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
     <!-- SM 国密系列 -->
     <script src="https://cdn.jsdelivr.net/npm/sm-crypto@0.3.13/dist/sm4.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sm-crypto@0.3.13/dist/sm3.js"></script>
@@ -287,6 +295,18 @@
                         </div>
                         <div id="jwt-verify-status" class="hidden"></div>
                         <div id="jwt-warnings" class="hidden"></div>
+                    </div>
+                    <!-- Rich QR display (replaces textarea for QR tool) -->
+                    <div id="qr-display" class="hidden">
+                        <div class="qr-container">
+                            <div id="qr-image" class="qr-image"></div>
+                        </div>
+                        <div id="qr-info" class="qr-info"></div>
+                        <div class="qr-actions">
+                            <button id="qr-download-png" class="qr-action-btn">下载 PNG</button>
+                            <button id="qr-download-svg" class="qr-action-btn">下载 SVG</button>
+                            <button id="qr-copy-dataurl" class="qr-action-btn">复制 Data URL</button>
+                        </div>
                     </div>
                     <!-- Error/info message -->
                     <div id="output-message" class="mt-2 text-xs hidden"></div>

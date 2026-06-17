@@ -753,25 +753,19 @@ const CipherTools = {
                 }
 
                 // Gzip compress before encrypt
-                let plainInput = input;
+                let compressedBytes = null;
                 if (opts.gzip === 'compress' && typeof pako !== 'undefined') {
-                    const compressed = pako.gzip(input);
-                    plainInput = Array.from(compressed).map(b => b.toString(16).padStart(2, '0')).join('');
-                    smOpts.output = 'array';
+                    compressedBytes = pako.gzip(input);
                     messages.push('已 Gzip 压缩');
                 }
 
                 let encrypted;
                 if (opts.gzip === 'compress' || useCustomPadding) {
-                    // Convert input to byte array
                     let inputBytes;
                     if (opts.gzip === 'compress') {
-                        inputBytes = [];
-                        for (let i = 0; i < plainInput.length; i += 2) {
-                            inputBytes.push(parseInt(plainInput.substr(i, 2), 16));
-                        }
+                        inputBytes = Array.from(compressedBytes);
                     } else {
-                        inputBytes = Array.from(new TextEncoder().encode(plainInput));
+                        inputBytes = Array.from(new TextEncoder().encode(input));
                     }
                     // Apply custom padding
                     if (useCustomPadding) {

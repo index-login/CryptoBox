@@ -344,8 +344,8 @@ const HashTools = {
         ],
         encode(input, opts = {}) {
             try {
-                // CRC32 implementation
-                const crc32Table = (() => {
+                // CRC32 implementation (table computed once and cached)
+                if (!HashTools._crc32Table) {
                     const table = new Uint32Array(256);
                     for (let i = 0; i < 256; i++) {
                         let crc = i;
@@ -354,8 +354,9 @@ const HashTools = {
                         }
                         table[i] = crc;
                     }
-                    return table;
-                })();
+                    HashTools._crc32Table = table;
+                }
+                const crc32Table = HashTools._crc32Table;
 
                 const bytes = new TextEncoder().encode(input);
                 let crc = 0xFFFFFFFF;
