@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>🐟 摸鱼小站</title>
+    <meta name="description" content="专属摸鱼小站：合成爱心小游戏 + 摸鱼日历 + 下班倒计时">
+    <meta name="theme-color" content="#0d1117">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            900: '#0d1117',
+                            800: '#161b22',
+                            700: '#1c2128',
+                            600: '#21262d',
+                            500: '#30363d',
+                        },
+                        accent: {
+                            DEFAULT: '#00d2d3',
+                            dark: '#0f3460',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Matter.js 物理引擎（合成爱心用） -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+
+    <style>
+        html, body { overscroll-behavior-y: contain; }
+        body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+        #game-canvas {
+            touch-action: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        #game-over { background: rgba(13, 17, 23, 0.82); backdrop-filter: blur(4px); }
+        .toast-show { opacity: 1 !important; transform: translate(-50%, 0) !important; }
+    </style>
+</head>
+<body class="bg-dark-900 text-gray-200 min-h-screen">
+    <div class="max-w-md mx-auto px-4 pt-6 pb-12">
+
+        <!-- Header -->
+        <header class="text-center mb-5">
+            <h1 id="site-title" class="text-2xl font-bold text-accent">🐟 摸鱼小站</h1>
+            <p class="text-xs text-gray-500 mt-1" id="today-line">加载中…</p>
+            <p class="font-mono text-3xl mt-1 tracking-wider" id="clock">--:--:--</p>
+        </header>
+
+        <!-- 摸鱼日历 -->
+        <section class="bg-dark-800 rounded-xl border border-dark-500 p-4 mb-4">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="text-sm font-semibold text-gray-300">📅 摸鱼日历</h2>
+                <span class="text-xs text-gray-500" id="week-progress-text"></span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 mb-3">
+                <div class="bg-dark-700 rounded-lg border border-dark-500 p-3 text-center">
+                    <div class="text-xs text-gray-500 mb-1">距离下班</div>
+                    <div class="text-xl font-mono font-semibold text-accent" id="offwork-value">--:--:--</div>
+                    <div class="text-[11px] text-gray-500 mt-1" id="offwork-note"></div>
+                </div>
+                <div class="bg-dark-700 rounded-lg border border-dark-500 p-3 text-center">
+                    <div class="text-xs text-gray-500 mb-1">下个节日</div>
+                    <div class="text-base font-semibold text-gray-200 truncate" id="festival-name">—</div>
+                    <div class="text-[11px] text-gray-500 mt-1" id="festival-note"></div>
+                </div>
+            </div>
+
+            <div id="week-dots" class="flex gap-1.5 mb-3" aria-label="本周进度"></div>
+
+            <div class="bg-dark-700/60 rounded-lg border border-dark-500 p-3">
+                <div class="text-xs text-gray-500 mb-1">💡 今日摸鱼语录</div>
+                <p class="text-sm text-gray-300 leading-relaxed" id="daily-quote"></p>
+            </div>
+        </section>
+
+        <!-- 合成爱心 -->
+        <section class="bg-dark-800 rounded-xl border border-dark-500 p-4">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="text-sm font-semibold text-gray-300">💖 合成爱心</h2>
+                <div class="flex items-center gap-3 text-sm">
+                    <div class="text-gray-400">分数 <span id="game-score" class="font-mono font-semibold text-accent">0</span></div>
+                    <div class="text-gray-400">🏆 <span id="game-best" class="font-mono text-yellow-400">0</span></div>
+                    <div class="text-gray-400">下一个 <span id="game-next">🤍</span></div>
+                </div>
+            </div>
+
+            <div id="game-wrap" class="relative rounded-xl overflow-hidden border border-dark-500 bg-dark-700/50">
+                <canvas id="game-canvas" class="block w-full"></canvas>
+
+                <!-- 游戏结束弹层 -->
+                <div id="game-over" class="hidden absolute inset-0 z-10 flex flex-col items-center justify-center text-center p-4">
+                    <div id="game-over-emoji" class="text-5xl mb-3">💍</div>
+                    <div class="text-lg font-bold text-accent mb-1">本局结束！</div>
+                    <div id="game-over-score" class="text-3xl font-mono font-bold mb-1">0</div>
+                    <div class="text-xs text-gray-400 mb-1">最高分 <span id="game-over-best" class="text-yellow-400 font-mono">0</span></div>
+                    <div id="game-over-easter" class="text-sm text-pink-400 mb-4 px-2"></div>
+                    <button id="btn-restart" class="bg-accent hover:bg-accent/80 text-dark-900 font-semibold px-6 py-2 rounded-lg text-sm transition-colors">再来一局</button>
+                </div>
+            </div>
+
+            <p class="text-xs text-gray-500 mt-2">👆 按住拖动选位置，松手投放 · 两颗相同爱心碰撞会升级 · 试试合到 💍</p>
+        </section>
+
+        <footer class="text-center mt-6">
+            <a href="index.html" class="text-xs text-gray-500 hover:text-accent transition-colors">← 返回 CryptoBox</a>
+        </footer>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 translate-y-20 bg-dark-600 border border-dark-500 rounded-lg px-4 py-2 text-sm shadow-lg opacity-0 transition-all duration-300 pointer-events-none z-50 whitespace-nowrap"></div>
+
+    <script>
+        /* ════════════════════════════════════════════════════════════
+         *  ⭐⭐⭐  专属配置区 —— 想改什么就改这里  ⭐⭐⭐
+         * ════════════════════════════════════════════════════════════ */
+        window.MOYU_CONFIG = {
+            name: '林霞',            // 她的专属称呼
+            offWorkHour: 18,         // 下班时间（24 小时制）
+            offWorkMinute: 0,
+
+            // 节日倒计时：过期了就在最上面加一行新的，格式 'YYYY-MM-DD'
+            festivals: [
+                { name: '国庆节', date: '2026-10-01' },
+                { name: '元旦',   date: '2027-01-01' },
+                { name: '春节',   date: '2027-02-06' },
+                { name: '清明节', date: '2027-04-05' },
+                { name: '劳动节', date: '2027-05-01' },
+                { name: '端午节', date: '2027-06-09' },
+                { name: '中秋节', date: '2027-09-15' },
+                { name: '国庆节', date: '2027-10-01' },
+            ],
+
+            // 今日语录：按天轮换，写 {name} 会自动替换成上面的称呼
+            quotes: [
+                '只要我摸鱼够快，KPI 就追不上我。',
+                '{name}，摸鱼别忘了喝水哦 ~',
+                '摸鱼一时爽，一直摸鱼一直爽。',
+                '上班的心情比上坟还沉重，摸鱼的时候才活着。',
+                '老板画的饼太大，我的胃留给奶茶。',
+                '认真你就输了，但摸鱼我们是认真的。',
+                '屏幕要亮，人要躺平。',
+                '带薪喝水，是打工人最基本的尊严。',
+                '摸鱼的尽头是下班，下班的尽头是自由。',
+                '工资到账那一刻，摸鱼都是香的。',
+                '我不是在摸鱼，我是在给大脑做 SPA。',
+                '键盘敲得越响，摸鱼摸得越安心。',
+                '摸鱼不是懒，是对生活的温柔抵抗。',
+                '今日事今日毕？不存在的，明日复明日。',
+                '别人上班赚钱，我上班顺便养生。',
+                '愿你的工资和摸鱼时长一样，越来越多。',
+                '会议一小时，摸鱼五分钟，全靠演技。',
+                '摸鱼第 N 天，技能点全点在了演技上。',
+                '生活不止眼前的苟且，还有工位上的远方。',
+                '水一杯，尿一泡，一上午就过去了。',
+                '今天的鱼，{name} 摸得最快乐。',
+                '摸鱼使我快乐，快乐使我不想上班。',
+                '工位坐得久，不如摸鱼摸得久。',
+                '今天也是元气满满地假装忙碌的一天。',
+            ],
+        };
+        /* ════════════════  配置区结束，下面不用动  ════════════════ */
+    </script>
+
+    <script src="js/moyu.js"></script>
+</body>
+</html>
