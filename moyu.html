@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>🐟 摸鱼小站</title>
-    <meta name="description" content="专属摸鱼小站：合成爱心小游戏 + 摸鱼日历 + 下班倒计时">
+    <meta name="description" content="专属摸鱼小站：可爱小游戏 + 摸鱼日历 + 下班倒计时 + 仙女棒烟花">
     <meta name="theme-color" content="#0d1117">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -39,7 +39,7 @@
     <style>
         html, body { overscroll-behavior-y: contain; }
         body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-        #game-canvas {
+        #game-canvas, #flappy-canvas {
             touch-action: none;
             -webkit-touch-callout: none;
             -webkit-user-select: none;
@@ -47,6 +47,20 @@
         }
         #game-over { background: rgba(13, 17, 23, 0.82); backdrop-filter: blur(4px); }
         .toast-show { opacity: 1 !important; transform: translate(-50%, 0) !important; }
+        /* 游戏中心 tab */
+        .game-tab { color: #8b949e; }
+        .game-tab.active { background: rgba(0, 210, 211, 0.12); color: #00d2d3; }
+        /* 全局氛围特效层 */
+        #fx-canvas { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
+        /* 指尖仙女棒 */
+        #spark-shield {
+            position: fixed; inset: 0; z-index: 45; display: none;
+            touch-action: none; background: rgba(13, 17, 23, 0.3); cursor: crosshair;
+            -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+        }
+        #btn-sparkler { z-index: 46; }
+        #btn-sparkler.on { border-color: #00d2d3; box-shadow: 0 0 14px rgba(0, 210, 211, 0.55); }
+        #spark-hint { z-index: 46; }
     </style>
 </head>
 <body class="bg-dark-900 text-gray-200 min-h-screen">
@@ -87,32 +101,80 @@
             </div>
         </section>
 
-        <!-- 合成爱心 -->
+        <!-- 今天吃什么 -->
+        <section class="bg-dark-800 rounded-xl border border-dark-500 p-4 mb-4">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="text-sm font-semibold text-gray-300">🍜 今天吃什么</h2>
+                <button id="btn-menu-edit" class="text-xs text-gray-500 hover:text-accent transition-colors">✏️ 编辑菜单</button>
+            </div>
+            <div class="bg-dark-700/60 rounded-lg border border-dark-500 p-4 text-center">
+                <p id="food-result" class="text-lg font-semibold text-gray-200 mb-3">选择困难？让我来 🤔</p>
+                <button id="btn-food" class="bg-accent hover:bg-accent/80 text-dark-900 font-semibold px-5 py-2 rounded-lg text-sm transition-colors">🍳 帮我选</button>
+            </div>
+        </section>
+
+        <!-- 游戏中心 -->
         <section class="bg-dark-800 rounded-xl border border-dark-500 p-4">
             <div class="flex items-center justify-between mb-3">
-                <h2 class="text-sm font-semibold text-gray-300">💖 合成爱心</h2>
-                <div class="flex items-center gap-3 text-sm">
-                    <div class="text-gray-400">分数 <span id="game-score" class="font-mono font-semibold text-accent">0</span></div>
-                    <div class="text-gray-400">🏆 <span id="game-best" class="font-mono text-yellow-400">0</span></div>
-                    <div class="text-gray-400">下一个 <span id="game-next">🤍</span></div>
+                <h2 class="text-sm font-semibold text-gray-300">🎮 游戏中心</h2>
+                <div class="flex bg-dark-700 rounded-lg p-0.5 border border-dark-500">
+                    <button id="tab-merge" class="game-tab active px-3 py-1 rounded-md text-xs font-medium transition-colors">💖 合成爱心</button>
+                    <button id="tab-flappy" class="game-tab px-3 py-1 rounded-md text-xs font-medium transition-colors">🐻 熊熊飞呀</button>
                 </div>
             </div>
 
-            <div id="game-wrap" class="relative rounded-xl overflow-hidden border border-dark-500 bg-dark-700/50">
-                <canvas id="game-canvas" class="block w-full"></canvas>
-
-                <!-- 游戏结束弹层 -->
-                <div id="game-over" class="hidden absolute inset-0 z-10 flex flex-col items-center justify-center text-center p-4">
-                    <div id="game-over-emoji" class="text-5xl mb-3">💍</div>
-                    <div class="text-lg font-bold text-accent mb-1">本局结束！</div>
-                    <div id="game-over-score" class="text-3xl font-mono font-bold mb-1">0</div>
-                    <div class="text-xs text-gray-400 mb-1">最高分 <span id="game-over-best" class="text-yellow-400 font-mono">0</span></div>
-                    <div id="game-over-easter" class="text-sm text-pink-400 mb-4 px-2"></div>
-                    <button id="btn-restart" class="bg-accent hover:bg-accent/80 text-dark-900 font-semibold px-6 py-2 rounded-lg text-sm transition-colors">再来一局</button>
+            <!-- 合成爱心 -->
+            <div id="game-merge">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3 text-sm">
+                        <div class="text-gray-400">分数 <span id="game-score" class="font-mono font-semibold text-accent">0</span></div>
+                        <div class="text-gray-400">🏆 <span id="game-best" class="font-mono text-yellow-400">0</span></div>
+                        <div class="text-gray-400">下一个 <span id="game-next">🤍</span></div>
+                    </div>
                 </div>
+
+                <div id="game-wrap" class="relative rounded-xl overflow-hidden border border-dark-500 bg-dark-700/50">
+                    <canvas id="game-canvas" class="block w-full"></canvas>
+
+                    <!-- 游戏结束弹层 -->
+                    <div id="game-over" class="hidden absolute inset-0 z-10 flex flex-col items-center justify-center text-center p-4">
+                        <div id="game-over-emoji" class="text-5xl mb-3">💍</div>
+                        <div class="text-lg font-bold text-accent mb-1">本局结束！</div>
+                        <div id="game-over-score" class="text-3xl font-mono font-bold mb-1">0</div>
+                        <div class="text-xs text-gray-400 mb-1">最高分 <span id="game-over-best" class="text-yellow-400 font-mono">0</span></div>
+                        <div id="game-over-easter" class="text-sm text-pink-400 mb-4 px-2"></div>
+                        <button id="btn-restart" class="bg-accent hover:bg-accent/80 text-dark-900 font-semibold px-6 py-2 rounded-lg text-sm transition-colors">再来一局</button>
+                    </div>
+                </div>
+
+                <p class="text-xs text-gray-500 mt-2">👆 按住拖动选位置，松手投放 · 两颗相同爱心碰撞会升级 · 试试合到 💍</p>
             </div>
 
-            <p class="text-xs text-gray-500 mt-2">👆 按住拖动选位置，松手投放 · 两颗相同爱心碰撞会升级 · 试试合到 💍</p>
+            <!-- 熊熊飞呀 -->
+            <div id="game-flappy" class="hidden">
+                <div class="flex items-center justify-between mb-3 text-sm">
+                    <div class="text-gray-400">分数 <span id="flappy-score" class="font-mono font-semibold text-accent">0</span></div>
+                    <div class="text-gray-400">🏆 <span id="flappy-best" class="font-mono text-yellow-400">0</span></div>
+                </div>
+
+                <div id="flappy-wrap" class="relative rounded-xl overflow-hidden border border-dark-500">
+                    <canvas id="flappy-canvas" class="block w-full"></canvas>
+
+                    <!-- 游戏结束弹层 -->
+                    <div id="flappy-over" class="hidden absolute inset-0 z-10 flex flex-col items-center justify-center text-center p-4"
+                        style="background: rgba(38, 24, 44, 0.78); backdrop-filter: blur(4px);">
+                        <div id="flappy-over-emoji" class="text-5xl mb-3">🐻</div>
+                        <div class="text-lg font-bold mb-1" style="color: #ff8fb3">熊熊撞晕啦！</div>
+                        <div id="flappy-over-score" class="text-3xl font-mono font-bold text-gray-100 mb-1">0</div>
+                        <div class="text-xs text-gray-300 mb-1">最高分 <span id="flappy-over-best" class="text-yellow-400 font-mono">0</span></div>
+                        <div id="flappy-over-easter" class="text-sm mb-4 px-2" style="color: #ffd6e8"></div>
+                        <button id="btn-flappy-restart" class="font-semibold px-6 py-2 rounded-lg text-sm transition-colors"
+                            style="background: #ff8fb3; color: #3b1f2a;">再来一局</button>
+                    </div>
+                </div>
+
+                <p class="text-xs text-gray-500 mt-2">👆 点一下屏幕，熊熊就往上飞 · 接住 💕 加 2 分 · 别撞棉花糖柱</p>
+            </div>
         </section>
 
         <footer class="text-center mt-6">
@@ -122,6 +184,33 @@
 
     <!-- Toast -->
     <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 translate-y-20 bg-dark-600 border border-dark-500 rounded-lg px-4 py-2 text-sm shadow-lg opacity-0 transition-all duration-300 pointer-events-none z-50 whitespace-nowrap"></div>
+
+    <!-- 爱心氛围特效层（点击冒爱心 / 开屏爱心雨 / 仙女棒火花共用） -->
+    <canvas id="fx-canvas"></canvas>
+    <!-- 仙女棒模式：输入拦截层 + 提示 + 开关 -->
+    <div id="spark-shield"></div>
+    <div id="spark-hint" class="hidden fixed top-4 left-1/2 -translate-x-1/2 bg-dark-700/90 border border-dark-500 rounded-full px-4 py-1.5 text-xs text-gray-300 pointer-events-none">✨ 指尖划动放烟花 · 再点 🎆 熄灭</div>
+    <button id="btn-sparkler" class="fixed bottom-5 right-4 w-11 h-11 rounded-full bg-dark-700 border border-dark-500 text-xl shadow-lg transition-transform active:scale-95" title="指尖仙女棒">🎆</button>
+
+    <!-- 编辑菜单弹层 -->
+    <div id="menu-editor" class="hidden fixed inset-0 z-40 flex items-end sm:items-center justify-center p-4" style="background: rgba(13, 17, 23, 0.7);">
+        <div class="bg-dark-800 border border-dark-500 rounded-xl w-full max-w-md p-4">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-semibold text-gray-300">✏️ 编辑菜单</h3>
+                <button id="btn-menu-close" class="text-gray-500 hover:text-gray-300 text-2xl leading-none px-1" aria-label="关闭">×</button>
+            </div>
+            <div id="menu-chips" class="flex flex-wrap gap-2 mb-3"></div>
+            <div class="flex gap-2 mb-3">
+                <input id="menu-input" type="text" maxlength="12" placeholder="输入新菜名…"
+                    class="flex-1 bg-dark-700 border border-dark-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent placeholder-gray-600">
+                <button id="btn-menu-add" class="bg-accent hover:bg-accent/80 text-dark-900 font-semibold px-4 py-2 rounded-lg text-sm">添加</button>
+            </div>
+            <div class="flex items-center justify-between">
+                <button id="btn-menu-reset" class="text-xs text-gray-500 hover:text-gray-300 transition-colors">↺ 恢复默认菜单</button>
+                <span class="text-xs text-gray-600" id="menu-count"></span>
+            </div>
+        </div>
+    </div>
 
     <script>
         /* ════════════════════════════════════════════════════════════
@@ -142,6 +231,12 @@
                 { name: '端午节', date: '2027-06-09' },
                 { name: '中秋节', date: '2027-09-15' },
                 { name: '国庆节', date: '2027-10-01' },
+            ],
+
+            // 今天吃什么：默认菜单（页面里点"✏️ 编辑菜单"可随时增删，改动存在手机里，这里只是初始值）
+            menu: [
+                '火锅', '麻辣烫', '烧烤', '奶茶', '螺蛳粉',
+                '日料', '汉堡', '饺子', '酸菜鱼', '黄焖鸡米饭',
             ],
 
             // 今日语录：按天轮换，写 {name} 会自动替换成上面的称呼
@@ -176,5 +271,7 @@
     </script>
 
     <script src="js/moyu.js"></script>
+    <script src="js/moyu-flappy.js"></script>
+    <script src="js/moyu-fun.js"></script>
 </body>
 </html>

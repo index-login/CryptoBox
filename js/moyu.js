@@ -112,6 +112,7 @@
         clearTimeout(toastTimer);
         toastTimer = setTimeout(() => t.classList.remove('toast-show'), 2200);
     }
+    window.moyuToast = showToast; // 给 moyu-flappy.js / moyu-fun.js 共用
 
     /* ==================== 合成爱心小游戏 ==================== */
 
@@ -462,7 +463,8 @@
         let dt = now - Game.lastTime;
         Game.lastTime = now;
         if (dt > 50) dt = 50; // 切后台回来防止物理爆炸
-        if (!Game.over && Game.engine) {
+        const mergeVisible = !$('game-merge').classList.contains('hidden'); // 游戏中心切走时暂停
+        if (!Game.over && Game.engine && mergeVisible) {
             Game.acc += dt;
             const step = 1000 / 60;
             while (Game.acc >= step) {
@@ -473,7 +475,7 @@
             checkGameOver(dt);
         }
         updateParticles(dt);
-        draw();
+        if (mergeVisible) draw();
     }
 
     /* ---------- 启动 ---------- */
@@ -495,4 +497,16 @@
     $('btn-restart').addEventListener('click', newRound);
     Game.lastTime = performance.now();
     requestAnimationFrame(loop);
+
+    /* ---------- 游戏中心 tab 切换 ---------- */
+
+    function switchTab(which) {
+        const mergeActive = which === 'merge';
+        $('game-merge').classList.toggle('hidden', !mergeActive);
+        $('game-flappy').classList.toggle('hidden', mergeActive);
+        $('tab-merge').classList.toggle('active', mergeActive);
+        $('tab-flappy').classList.toggle('active', !mergeActive);
+    }
+    $('tab-merge').addEventListener('click', () => switchTab('merge'));
+    $('tab-flappy').addEventListener('click', () => switchTab('flappy'));
 })();
