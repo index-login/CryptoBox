@@ -22,11 +22,11 @@
     const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 
     // 手感参数（觉得难/简单就调这里）：数值按毫秒计
-    const GRAVITY = 0.0012;    // 下落加速度（调小 = 飘）
-    const FLAP_VY = -0.36;     // 点击时向上的冲量（绝对值越大 = 一下飞越高）
-    const MAX_FALL = 0.6;      // 下落限速（调小 = 掉得慢）
-    const BASE_SPEED = 0.15;   // 柱子水平速度起点
-    const MAX_SPEED = 0.22;    // 柱子水平速度上限
+    const GRAVITY = 0.0008;    // 下落加速度（调小 = 飘）
+    const FLAP_VY = -0.33;     // 点击时向上的冲量（绝对值越大 = 一下飞越高）
+    const MAX_FALL = 0.4;      // 下落限速（调小 = 掉得慢）
+    const BASE_SPEED = 0.13;   // 柱子水平速度起点
+    const MAX_SPEED = 0.2;     // 柱子水平速度上限
 
     const F = {
         ctx: canvas.getContext('2d'),

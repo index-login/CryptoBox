@@ -33,20 +33,33 @@
             }
         }
     </script>
-    <!-- Matter.js 物理引擎（合成爱心用） -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <!-- 全部游戏均为手写物理/渲染，无第三方依赖 -->
 
     <style>
         html, body { overscroll-behavior-y: contain; }
         body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-        #game-canvas, #flappy-canvas {
+        #flappy-canvas, #golf-canvas {
             touch-action: none;
             -webkit-touch-callout: none;
             -webkit-user-select: none;
             user-select: none;
         }
-        #game-over { background: rgba(13, 17, 23, 0.82); backdrop-filter: blur(4px); }
+        #golf-over { background: rgba(18, 20, 34, 0.85); backdrop-filter: blur(4px); }
         .toast-show { opacity: 1 !important; transform: translate(-50%, 0) !important; }
+        /* 球架（一杆进洞选球种） */
+        .bag-chip {
+            position: relative;
+            width: 38px; height: 38px;
+            border-radius: 10px;
+            border: 1px solid #30363d;
+            background: #1c2128;
+            font-size: 18px; line-height: 1;
+            cursor: pointer;
+            transition: border-color .15s, box-shadow .15s;
+        }
+        .bag-chip.sel { border-color: #00d2d3; box-shadow: 0 0 8px rgba(0, 210, 211, 0.4); }
+        .bag-chip.none { opacity: 0.35; }
+        .bag-chip .cnt { position: absolute; right: 3px; bottom: 2px; font-size: 9px; color: #8b949e; }
         /* 游戏中心 tab */
         .game-tab { color: #8b949e; }
         .game-tab.active { background: rgba(0, 210, 211, 0.12); color: #00d2d3; }
@@ -118,40 +131,13 @@
             <div class="flex items-center justify-between mb-3">
                 <h2 class="text-sm font-semibold text-gray-300">🎮 游戏中心</h2>
                 <div class="flex bg-dark-700 rounded-lg p-0.5 border border-dark-500">
-                    <button id="tab-merge" class="game-tab active px-3 py-1 rounded-md text-xs font-medium transition-colors">💖 合成爱心</button>
-                    <button id="tab-flappy" class="game-tab px-3 py-1 rounded-md text-xs font-medium transition-colors">🐻 熊熊飞呀</button>
+                    <button id="tab-flappy" class="game-tab active px-3 py-1 rounded-md text-xs font-medium transition-colors">🐻 熊熊飞呀</button>
+                    <button id="tab-golf" class="game-tab px-3 py-1 rounded-md text-xs font-medium transition-colors">⛳ 一杆进洞</button>
                 </div>
-            </div>
-
-            <!-- 合成爱心 -->
-            <div id="game-merge">
-                <div class="flex items-center justify-between mb-3">
-                    <div class="flex items-center gap-3 text-sm">
-                        <div class="text-gray-400">分数 <span id="game-score" class="font-mono font-semibold text-accent">0</span></div>
-                        <div class="text-gray-400">🏆 <span id="game-best" class="font-mono text-yellow-400">0</span></div>
-                        <div class="text-gray-400">下一个 <span id="game-next">🤍</span></div>
-                    </div>
-                </div>
-
-                <div id="game-wrap" class="relative rounded-xl overflow-hidden border border-dark-500 bg-dark-700/50">
-                    <canvas id="game-canvas" class="block w-full"></canvas>
-
-                    <!-- 游戏结束弹层 -->
-                    <div id="game-over" class="hidden absolute inset-0 z-10 flex flex-col items-center justify-center text-center p-4">
-                        <div id="game-over-emoji" class="text-5xl mb-3">💍</div>
-                        <div class="text-lg font-bold text-accent mb-1">本局结束！</div>
-                        <div id="game-over-score" class="text-3xl font-mono font-bold mb-1">0</div>
-                        <div class="text-xs text-gray-400 mb-1">最高分 <span id="game-over-best" class="text-yellow-400 font-mono">0</span></div>
-                        <div id="game-over-easter" class="text-sm text-pink-400 mb-4 px-2"></div>
-                        <button id="btn-restart" class="bg-accent hover:bg-accent/80 text-dark-900 font-semibold px-6 py-2 rounded-lg text-sm transition-colors">再来一局</button>
-                    </div>
-                </div>
-
-                <p class="text-xs text-gray-500 mt-2">👆 按住拖动选位置，松手投放 · 两颗相同爱心碰撞会升级 · 试试合到 💍</p>
             </div>
 
             <!-- 熊熊飞呀 -->
-            <div id="game-flappy" class="hidden">
+            <div id="game-flappy">
                 <div class="flex items-center justify-between mb-3 text-sm">
                     <div class="text-gray-400">分数 <span id="flappy-score" class="font-mono font-semibold text-accent">0</span></div>
                     <div class="text-gray-400">🏆 <span id="flappy-best" class="font-mono text-yellow-400">0</span></div>
@@ -174,6 +160,37 @@
                 </div>
 
                 <p class="text-xs text-gray-500 mt-2">👆 点一下屏幕，熊熊就往上飞 · 接住 💕 加 2 分 · 别撞棉花糖柱</p>
+            </div>
+
+            <!-- 一杆进洞 -->
+            <div id="game-golf" class="hidden">
+                <div class="flex items-center justify-between mb-3 text-sm">
+                    <div class="text-gray-400">第 <span id="golf-hole" class="font-semibold text-gray-200">1</span> 洞 · ❤️<span id="golf-hearts">3</span> · 杆 <span id="golf-strokes" class="font-mono text-accent">0</span>/<span id="golf-limit" class="font-mono">3</span> · 🔥<span id="golf-streak" class="font-mono">0</span></div>
+                    <div class="flex items-center gap-2">
+                        <div class="text-gray-400">🏆 <span id="golf-best" class="font-mono text-yellow-400">0</span></div>
+                        <div class="text-gray-400">分 <span id="golf-score" class="font-mono font-semibold text-accent">0</span></div>
+                    </div>
+                </div>
+
+                <div id="golf-wrap" class="relative rounded-xl overflow-hidden border border-dark-500">
+                    <canvas id="golf-canvas" class="block w-full"></canvas>
+
+                    <!-- 游戏结束弹层 -->
+                    <div id="golf-over" class="hidden absolute inset-0 z-10 flex flex-col items-center justify-center text-center p-4">
+                        <div id="golf-over-emoji" class="text-5xl mb-3">⛳</div>
+                        <div class="text-lg font-bold mb-1" style="color: #ffd9a0">收杆休息！</div>
+                        <div id="golf-over-score" class="text-3xl font-mono font-bold text-gray-100 mb-1">0</div>
+                        <div class="text-xs text-gray-300 mb-1">打完 <span id="golf-over-holes" class="font-mono">0</span> 洞 · 最高分 <span id="golf-over-best" class="text-yellow-400 font-mono">0</span></div>
+                        <div id="golf-over-easter" class="text-sm mb-4 px-2" style="color: #ffd9a0"></div>
+                        <button id="btn-golf-restart" class="font-semibold px-6 py-2 rounded-lg text-sm transition-colors"
+                            style="background: #ffd9a0; color: #3d2b1f;">再来一轮</button>
+                    </div>
+                </div>
+
+                <!-- 球架：选球种（特技球有限量角标） -->
+                <div id="golf-bag" class="flex items-center gap-2 mt-3 flex-wrap"></div>
+
+                <p class="text-xs text-gray-500 mt-2">👆 按住球往后拉发射 · 每洞限 3 杆，球停在哪就从哪继续打 · 撞树弹回来不丢心，杆数用完才丢 ❤️ · 🌲 挡路就高抛过树 · 🌟 球飞行中再点一下冲刺</p>
             </div>
         </section>
 
@@ -272,6 +289,7 @@
 
     <script src="js/moyu.js"></script>
     <script src="js/moyu-flappy.js"></script>
+    <script src="js/moyu-golf.js"></script>
     <script src="js/moyu-fun.js"></script>
 </body>
 </html>
